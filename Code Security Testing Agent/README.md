@@ -65,18 +65,7 @@ cd ".\code-security-web"
 - `code-security-web/cli.ps1`：命令行运行 web 工具入口
 - `run-code-security-agent.ps1`（如存在于仓库上层历史版本）：直连 nanobot 的 agent/gateway 入口
 
-## 隐私与提交说明
-
-以下内容默认不应提交（已在 `.gitignore` 处理）：
-
-- `code-security-agent/sessions/`（历史会话）
-- `code-security-agent/memory/`（运行时记忆）
-- `code-security-agent/uploads/`（上传样本）
-- `code-security-web/data/ui_settings.json`（可能含 API key）
-- `code-security-web/data/nanobot_runtime.json` / `data/pipelines/`
-- `code-security-web/tui/node_modules/`、`__pycache__/`
-
 ## 备注
 
 - 本项目是面向安全测试流程的工程化实现，不是上游 nanobot 的完整镜像仓库。
-- 发布前建议先执行：`git status`，确认仅包含源码与文档变更。
+
