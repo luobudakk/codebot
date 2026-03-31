@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>代码安全多智能体流水线</title>
+  <style>
+    :root { font-family: system-ui, Segoe UI, sans-serif; color: #e8eaed; background: #0f1419; }
+    body { max-width: 980px; margin: 0 auto; padding: 1.2rem; }
+    h1 { font-size: 1.3rem; margin: 0 0 0.6rem; }
+    label { display: block; margin: 0.55rem 0 0.3rem; color: #9aa0a6; font-size: 0.9rem; }
+    input[type=file], input[type=text], input[type=password], input[type=number], select, textarea {
+      width: 100%; box-sizing: border-box; background: #1a2332; border: 1px solid #2d3a4f;
+      color: #e8eaed; border-radius: 8px; padding: 0.45rem 0.55rem;
+    }
+    textarea { min-height: 76px; resize: vertical; }
+    button { margin-top: 0.7rem; margin-right: 0.5rem; background: #3c6df0; color: #fff; border: none; padding: 0.55rem 1rem; border-radius: 8px; font-weight: 600; cursor: pointer; }
+    button.secondary { background: #394457; }
+    button.danger { background: #8b2e2e; }
+    button:disabled { opacity: 0.55; cursor: not-allowed; }
+    fieldset { border: 1px solid #2d3a4f; border-radius: 12px; padding: 0.75rem 1rem 1rem; margin: 1rem 0; }
+    legend { padding: 0 0.4rem; color: #bdc1c6; }
+    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+    @media (max-width: 700px) { .row2 { grid-template-columns: 1fr; } }
+    .hint { color: #7c8288; font-size: 0.84rem; }
+    #setStatus { margin-top: 0.65rem; color: #9aa0a6; font-size: 0.9rem; }
+    code { background: #1a2332; padding: 0.1rem 0.3rem; border-radius: 4px; }
+    #pipelineNodes { font-size: 0.88rem; margin: 0.5rem 0; }
+    .pn-row { display: grid; grid-template-columns: 1fr 6rem 1.2fr; gap: 0.5rem; padding: 0.35rem 0.5rem; border-bottom: 1px solid #263247; align-items: start; }
+    .pn-row.pn-head { color: #9aa0a6; font-weight: 600; border-bottom: 2px solid #394457; }
+    #pipelineSummary { margin-top: 0.6rem; border: 1px solid #2d3a4f; border-radius: 10px; padding: 0.65rem; background: #0b0f14; min-height: 100px; max-height: 40vh; overflow: auto; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>代码安全 · Planner → Coordinator → Specialists → Summary</h1>
+  <p class="hint">请先保存设置（Workspace / Nanobot / API Key）。流程：Planner → Coordinator → 专项 Worker → Summary。若上游返回鉴权/配额/超时，系统会在节点备注里标注 `upstream_*` 方便你定位。</p>
+
+  <fieldset>
+    <legend>设置</legend>
+    <div class="row2">
+      <div><label for="workspace">Workspace</label><input id="workspace" type="text" /></div>
+      <div><label for="nanobotBin">Nanobot 路径</label><input id="nanobotBin" type="text" /></div>
+    </div>
+    <div class="row2">
+      <div><label for="provider">Provider</label>
+        <select id="provider">
+          <option value="auto">auto</option><option value="anthropic">anthropic</option><option value="openai">openai</option>
+          <option value="openrouter">openrouter</option><option value="deepseek">deepseek</option><option value="moonshot">moonshot</option>
+          <option value="zhipu">zhipu</option><option value="gemini">gemini</option><option value="ollama">ollama</option>
+          <option value="mistral">mistral</option><option value="vllm">vllm</option><option value="custom">custom</option>
+        </select>
+      </div>
+      <div><label for="model">Model</label><input id="model" type="text" /></div>
+    </div>
+    <label for="primaryApiKey">当前 Provider 的 API Key（留空不改动）</label>
+    <input id="primaryApiKey" type="password" />
+    <p class="hint" id="keyHint"></p>
+    <label for="extraApiKeysJson">更多密钥 JSON（可选）</label>
+    <textarea id="extraApiKeysJson" rows="2" placeholder='{"openai":{"apiKey":"sk-..."}}'></textarea>
+    <div class="row2">
+      <div><label for="baseConfigPath">基础配置文件（可选）</label><input id="baseConfigPath" type="text" /></div>
+      <div><label for="customApiBase">custom.apiBase</label><input id="customApiBase" type="text" /></div>
+    </div>
+    <label><input id="useOnlyBaseConfig" type="checkbox" /> 仅使用基础配置文件</label>
+    <label for="mergeJson">合并 JSON（可选）</label>
+    <textarea id="mergeJson" rows="3"></textarea>
+    <div class="row2">
+      <div>
+        <label><input id="toolsRestrictToWorkspace" type="checkbox" /> restrictToWorkspace</label>
+        <label style="margin-top:0.5rem"><input id="execEnable" type="checkbox" /> exec</label>
+      </div>
+      <div><label for="execTimeout">exec 超时（秒）</label><input id="execTimeout" type="number" min="1" /></div>
+    </div>
+    <div class="row2">
+      <div><label for="maxToolIterations">maxToolIterations</label><input id="maxToolIterations" type="number" min="1" /></div>
+      <div><label for="temperature">temperature</label><input id="temperature" type="number" step="0.05" /></div>
+    </div>
+    <div class="row2">
+      <div><label for="timezone">timezone</label><input id="timezone" type="text" /></div>
+      <div><label for="scanTimeoutSec">单次超时（秒）</label><input id="scanTimeoutSec" type="number" min="30" /></div>
+    </div>
+    <p class="hint"><strong>流水线</strong></p>
+    <div class="row2">
+      <div><label for="pipelineWorkerConcurrency">Worker 并发上限</label><input id="pipelineWorkerConcurrency" type="number" min="1" max="16" /></div>
+      <div><label for="pipelineMinTasks">子任务最少</label><input id="pipelineMinTasks" type="number" min="1" max="24" /></div>
+    </div>
+    <div class="row2">
+      <div><label for="pipelineMaxTasks">子任务最多</label><input id="pipelineMaxTasks" type="number" min="1" max="24" /></div>
+      <div><label for="pipelineWorkerRetries">Worker 失败重试次数</label><input id="pipelineWorkerRetries" type="number" min="0" max="3" /></div>
+    </div>
+    <label><input id="pipelineEnableCoordinator" type="checkbox" /> 启用 Coordinator（分配 route / 工具策略路由）</label>
+    <label for="pipelineFallbackMergeJson">重试时额外合并 JSON（可选，叠在 general 路线上）</label>
+      <textarea id="pipelineFallbackMergeJson" rows="2" placeholder='{"agents":{"defaults":{"temperature":0}}}'></textarea>
+    <div class="row2">
+      <div><label for="pipelineRetryProvider">重试时切换 Provider（可选，如 openrouter）</label><input id="pipelineRetryProvider" type="text" placeholder="空=与首次相同" /></div>
+      <div><label for="pipelineRetryModel">重试时切换 Model（可选）</label><input id="pipelineRetryModel" type="text" placeholder="空=与首次相同" /></div>
+    </div>
+    <div class="row2">
+      <div><label for="maxFiles">最多文件</label><input id="maxFiles" type="number" min="1" /></div>
+      <div><label for="maxFileMb">单文件 MB</label><input id="maxFileMb" type="number" min="1" /></div>
+    </div>
+    <label for="maxBodyMb">总上限 MB</label><input id="maxBodyMb" type="number" min="1" />
+    <button type="button" id="btnSave">保存设置</button>
+    <button type="button" class="secondary" id="btnReload">重新加载</button>
+    <button type="button" class="danger" id="btnClearKeys">清除全部密钥</button>
+    <div id="setStatus"></div>
+  </fieldset>
+
+  <fieldset>
+    <legend>流水线审阅</legend>
+    <p class="hint">点「开始」生成 `job_id` 并拉取 SSE；状态在 `data/pipelines/&lt;jobId&gt;/state.json`（含 metrics）。</p>
+    <div class="row2">
+      <div>
+        <label for="p_scan_mode">审阅侧重</label>
+        <select id="p_scan_mode">
+          <option value="full">全面</option>
+          <option value="quick">快速（高危优先）</option>
+          <option value="deps">依赖与供应链</option>
+          <option value="secrets">密钥与敏感配置</option>
+        </select>
+      </div>
+      <div>
+        <label for="p_worker_conc">本次并发（空则用设置）</label>
+        <input id="p_worker_conc" type="number" min="1" max="16" placeholder="默认" />
+      </div>
+    </div>
+    <label for="p_modes">modes（可选）</label>
+    <input id="p_modes" type="text" placeholder="例如：侧重 API 面" />
+    <label for="p_files">上传文件（可选）</label>
+    <input id="p_files" type="file" multiple />
+    <label for="p_message">审阅目标</label>
+    <textarea id="p_message" rows="3" placeholder="例如：审查上传代码的认证与注入风险"></textarea>
+    <button type="button" id="btnPipelineStart">开始流水线</button>
+    <div id="pipelineRunStatus" class="hint" style="margin-top:0.5rem"></div>
+    <div class="hint" style="margin-top:0.35rem">说明：节点备注中的 `upstream_llm_or_quota` / `upstream_llm_timeout` / `upstream_authentication_required` 表示上游拒绝或超时，不等于程序逻辑错误。</div>
+    <div id="pipelineNodes"></div>
+    <div id="pipelineSummary"></div>
+  </fieldset>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    function parseSSE(block) {
+      const lines = block.split("\n");
+      let event = "message";
+      const dataLines = [];
+      for (const line of lines) {
+        if (line.startsWith("event:")) event = line.slice(6).trim();
+        if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
+      }
+      const raw = dataLines.join("\n");
+      let data = {};
+      if (raw) {
+        try { data = JSON.parse(raw); } catch (_) { data = { text: raw }; }
+      }
+      return { event, data };
+    }
+
+    async function loadSettings() {
+      const res = await fetch("/api/settings");
+      if (!res.ok) throw new Error("settings " + res.status);
+      const s = await res.json();
+      $("workspace").value = s.workspace || "";
+      $("nanobotBin").value = s.nanobotBin || "";
+      $("provider").value = s.provider || "auto";
+      $("model").value = s.model || "";
+      $("baseConfigPath").value = s.baseConfigPath || "";
+      $("customApiBase").value = s.customApiBase || "";
+      $("useOnlyBaseConfig").checked = !!s.useOnlyBaseConfig;
+      $("mergeJson").value = s.mergeJson || "";
+      $("toolsRestrictToWorkspace").checked = s.toolsRestrictToWorkspace !== false;
+      $("execEnable").checked = s.execEnable !== false;
+      $("execTimeout").value = s.execTimeout ?? 120;
+      $("maxToolIterations").value = s.maxToolIterations ?? 40;
+      $("temperature").value = s.temperature ?? 0.1;
+      $("timezone").value = s.timezone || "UTC";
+      $("scanTimeoutSec").value = s.scanTimeoutSec ?? 1800;
+      $("pipelineWorkerConcurrency").value = s.pipelineWorkerConcurrency ?? 3;
+      $("pipelineMinTasks").value = s.pipelineMinTasks ?? 5;
+      $("pipelineMaxTasks").value = s.pipelineMaxTasks ?? 12;
+      $("pipelineWorkerRetries").value = s.pipelineWorkerRetries ?? 1;
+      $("pipelineEnableCoordinator").checked = s.pipelineEnableCoordinator !== false;
+      $("pipelineFallbackMergeJson").value = s.pipelineFallbackMergeJson || "";
+      $("pipelineRetryProvider").value = s.pipelineRetryProvider || "";
+      $("pipelineRetryModel").value = s.pipelineRetryModel || "";
+      $("maxFiles").value = s.maxFiles ?? 40;
+      $("maxFileMb").value = s.maxFileMb ?? 8;
+      $("maxBodyMb").value = s.maxBodyMb ?? 80;
+      $("primaryApiKey").value = "";
+      $("extraApiKeysJson").value = "";
+      const pk = s.providersWithKeys || [];
+      $("keyHint").textContent = pk.length ? "已保存密钥的 provider: " + pk.join(", ") : "尚未保存 API Key。";
+    }
+
+    function collectSettingsBody() {
+      let extra = {};
+      const raw = $("extraApiKeysJson").value.trim();
+      if (raw) extra = JSON.parse(raw);
+      if (typeof extra !== "object" || extra === null || Array.isArray(extra)) {
+        throw new Error("更多密钥须为 JSON 对象");
+      }
+      const apiKeys = {};
+      for (const [k, v] of Object.entries(extra)) {
+        if (v && typeof v === "object" && typeof v.apiKey === "string" && v.apiKey.trim()) {
+          apiKeys[k] = v.apiKey.trim();
+        }
+      }
+      const key = $("primaryApiKey").value.trim();
+      if (key) apiKeys[$("provider").value] = key;
+
+      return {
+        workspace: $("workspace").value.trim(),
+        nanobotBin: $("nanobotBin").value.trim(),
+        provider: $("provider").value,
+        model: $("model").value.trim(),
+        baseConfigPath: $("baseConfigPath").value.trim(),
+        customApiBase: $("customApiBase").value.trim(),
+        useOnlyBaseConfig: $("useOnlyBaseConfig").checked,
+        mergeJson: $("mergeJson").value.trim(),
+        toolsRestrictToWorkspace: $("toolsRestrictToWorkspace").checked,
+        execEnable: $("execEnable").checked,
+        execTimeout: parseInt($("execTimeout").value, 10) || 120,
+        maxToolIterations: parseInt($("maxToolIterations").value, 10) || 40,
+        temperature: parseFloat($("temperature").value) || 0.1,
+        timezone: $("timezone").value.trim() || "UTC",
+        scanTimeoutSec: parseInt($("scanTimeoutSec").value, 10) || 1800,
+        pipelineWorkerConcurrency: parseInt($("pipelineWorkerConcurrency").value, 10) || 3,
+        pipelineMinTasks: parseInt($("pipelineMinTasks").value, 10) || 5,
+        pipelineMaxTasks: parseInt($("pipelineMaxTasks").value, 10) || 12,
+        pipelineWorkerRetries: parseInt($("pipelineWorkerRetries").value, 10) || 0,
+        pipelineEnableCoordinator: $("pipelineEnableCoordinator").checked,
+        pipelineFallbackMergeJson: $("pipelineFallbackMergeJson").value.trim(),
+        pipelineRetryProvider: $("pipelineRetryProvider").value.trim(),
+        pipelineRetryModel: $("pipelineRetryModel").value.trim(),
+        maxFiles: parseInt($("maxFiles").value, 10) || 40,
+        maxFileMb: parseInt($("maxFileMb").value, 10) || 8,
+        maxBodyMb: parseInt($("maxBodyMb").value, 10) || 80,
+        apiKeys,
+      };
+    }
+
+    $("btnSave").addEventListener("click", async () => {
+      $("setStatus").textContent = "";
+      try {
+        const body = collectSettingsBody();
+        const res = await fetch("/api/settings", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          $("setStatus").textContent = "保存失败: " + JSON.stringify(data.detail || data);
+          return;
+        }
+        $("setStatus").textContent = "设置已保存。";
+        await loadSettings();
+      } catch (e) {
+        $("setStatus").textContent = String(e);
+      }
+    });
+
+    $("btnReload").addEventListener("click", () => loadSettings().catch((e) => ($("setStatus").textContent = String(e))));
+
+    $("btnClearKeys").addEventListener("click", async () => {
+      if (!confirm("确认清除所有已保存 API Key？")) return;
+      await fetch("/api/settings/clear-keys", { method: "POST" });
+      $("setStatus").textContent = "已清除密钥。";
+      await loadSettings();
+    });
+
+    function renderPipelineNodes(ui) {
+      const el = $("pipelineNodes");
+      const rows = [
+        '<div class="pn-row pn-head"><span>节点</span><span>状态</span><span>备注</span></div>',
+      ];
+      rows.push(
+        `<div class="pn-row"><span>Planner</span><span>${ui.planner || "—"}</span><span>${ui.plannerNote || ""}</span></div>`,
+        `<div class="pn-row"><span>Coordinator</span><span>${ui.coordinator || "—"}</span><span>${ui.coordinatorNote || ""}</span></div>`
+      );
+      const ids = Object.keys(ui.workers || {}).sort();
+      for (const id of ids) {
+        const w = ui.workers[id] || {};
+        rows.push(
+          `<div class="pn-row"><span>Worker <code>${id}</code></span><span>${w.status || "—"}</span><span>${w.note || ""}</span></div>`
+        );
+      }
+      rows.push(
+        `<div class="pn-row"><span>Summary</span><span>${ui.summary || "—"}</span><span>${ui.summaryNote || ""}</span></div>`
+      );
+      el.innerHTML = rows.join("");
+    }
+
+    $("btnPipelineStart").addEventListener("click", async () => {
+      const btn = $("btnPipelineStart");
+      btn.disabled = true;
+      $("pipelineRunStatus").textContent = "";
+      $("pipelineSummary").textContent = "";
+      const msg = $("p_message").value.trim();
+      const files = $("p_files").files;
+      if (!msg && (!files || files.length === 0)) {
+        $("pipelineRunStatus").textContent = "请填写审阅目标或上传文件。";
+        btn.disabled = false;
+        return;
+      }
+
+      const ui = {
+        planner: "待运行",
+        plannerNote: "",
+        coordinator: "待运行",
+        coordinatorNote: "",
+        workers: {},
+        summary: "待运行",
+        summaryNote: "",
+      };
+      renderPipelineNodes(ui);
+
+      const fd = new FormData();
+      fd.append("message", msg);
+      fd.append("scan_mode", $("p_scan_mode").value);
+      fd.append("modes", $("p_modes").value.trim());
+      const pwc = $("p_worker_conc").value.trim();
+      if (pwc) fd.append("pipeline_worker_concurrency", pwc);
+      for (const f of files) fd.append("files", f);
+
+      let jobId = "";
+      try {
+        const res = await fetch("/api/pipeline/start", { method: "POST", body: fd });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          $("pipelineRunStatus").textContent = "创建任务失败 HTTP " + res.status + " " + JSON.stringify(data.detail || data);
+          btn.disabled = false;
+          return;
+        }
+        jobId = data.job_id;
+        $("pipelineRunStatus").textContent = "job_id: " + jobId + " · `" + (data.upload_path || "") + "` — SSE…";
+      } catch (e) {
+        $("pipelineRunStatus").textContent = String(e);
+        btn.disabled = false;
+        return;
+      }
+
+      ui.planner = "运行中";
+      renderPipelineNodes(ui);
+
+      try {
+        const res = await fetch("/api/pipeline/" + jobId + "/stream");
+        if (!res.ok || !res.body) {
+          const t = await res.text().catch(() => "");
+          $("pipelineRunStatus").textContent = "流失败 HTTP " + res.status + " " + t;
+          btn.disabled = false;
+          return;
+        }
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let sseBuf = "";
+        let sawDone = false;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          sseBuf += decoder.decode(value, { stream: true });
+          const parts = sseBuf.split("\n\n");
+          sseBuf = parts.pop() || "";
+
+          for (const block of parts) {
+            if (!block.trim()) continue;
+            const evt = parseSSE(block);
+            if (evt.event === "plan") {
+              ui.planner = evt.data.exit_code === 0 ? "完成" : "完成(非0)";
+              ui.plannerNote = (evt.data.tasks || []).length + " 子任务";
+              ui.workers = {};
+              for (const t of evt.data.tasks || []) {
+                ui.workers[t.id] = { status: "排队", note: (t.focus || "").slice(0, 80) };
+              }
+              ui.coordinator = "运行中";
+              renderPipelineNodes(ui);
+            } else if (evt.event === "coordinator") {
+              ui.coordinator = evt.data.enabled ? "完成" : "跳过";
+              ui.coordinatorNote = ((evt.data.tasks || []).length) + " 条 route 已分配";
+              ui.workers = {};
+              for (const t of evt.data.tasks || []) {
+                const r = t.route || "?";
+                ui.workers[t.id] = { status: "排队", note: `route:${r} ` + (t.focus || "").slice(0, 60) };
+              }
+              renderPipelineNodes(ui);
+            } else if (evt.event === "worker_start") {
+              const tid = evt.data.task_id;
+              const rt = evt.data.route ? ` [${evt.data.route}]` : "";
+              if (ui.workers[tid]) {
+                ui.workers[tid].status = "运行中";
+                ui.workers[tid].note = rt + (evt.data.focus || "").slice(0, 70);
+              }
+              renderPipelineNodes(ui);
+            } else if (evt.event === "worker_chunk") {
+              $("pipelineRunStatus").textContent = "job `" + jobId + "` · Worker `" + evt.data.task_id + "` 输出中…";
+            } else if (evt.event === "worker_done") {
+              const tid = evt.data.task_id;
+              if (evt.data.error) {
+                if (ui.workers[tid]) {
+                  ui.workers[tid].status = "错误";
+                  ui.workers[tid].note = String(evt.data.error) + (evt.data.attempts ? " · attempts " + evt.data.attempts : "");
+                }
+              } else {
+                if (ui.workers[tid]) {
+                  ui.workers[tid].status = "完成";
+                  ui.workers[tid].note = "exit " + evt.data.exit_code + (evt.data.attempts ? " · " + evt.data.attempts + " 次" : "");
+                }
+              }
+              renderPipelineNodes(ui);
+            } else if (evt.event === "summary_chunk") {
+              ui.summary = "运行中";
+              $("pipelineRunStatus").textContent = "job `" + jobId + "` · Summary 合并输出中…";
+              $("pipelineSummary").textContent += evt.data.text || "";
+              renderPipelineNodes(ui);
+            } else if (evt.event === "done") {
+              sawDone = true;
+              const skippedSummary =
+                evt.data.all_workers_failed === true || evt.data.summary_exit_code === -3;
+              if (skippedSummary) {
+                ui.summary = "已跳过";
+                ui.summaryNote = "无成功子任务 · exit " + (evt.data.summary_exit_code ?? "—");
+                if (evt.data.summary_preview) $("pipelineSummary").textContent = evt.data.summary_preview;
+              } else {
+                ui.summary = "完成";
+                ui.summaryNote = "exit " + (evt.data.summary_exit_code ?? "—");
+                const m = evt.data.metrics;
+                if (m) ui.summaryNote += " · 成功 " + (m.worker_successes ?? "?") + "/" + (m.worker_invocations ?? "?") + " 调用";
+              }
+              renderPipelineNodes(ui);
+              $("pipelineRunStatus").textContent = skippedSummary
+                ? "已结束（全部子任务失败）· `" + (evt.data.state_path || "") + "`"
+                : "完成 · `" + (evt.data.state_path || "") + "`";
+            } else if (evt.event === "error") {
+              if (evt.data.node === "summary") {
+                ui.summary = "错误";
+              } else if (evt.data.node === "planner") {
+                ui.planner = "错误";
+                ui.plannerNote = evt.data.code ? String(evt.data.code) : "";
+                ui.coordinator = "未运行";
+                ui.coordinatorNote = "Planner 失败";
+                ui.summary = "未运行";
+                ui.summaryNote = "Planner 失败";
+                ui.workers = {};
+              }
+              renderPipelineNodes(ui);
+              $("pipelineRunStatus").textContent = "错误: " + (evt.data.message || JSON.stringify(evt.data));
+            }
+          }
+        }
+        if (!sawDone && !$("pipelineRunStatus").textContent.startsWith("错误:")) {
+          $("pipelineRunStatus").textContent += " · 连接关闭";
+        }
+      } catch (e) {
+        $("pipelineRunStatus").textContent = "流读取失败: " + e;
+      }
+      btn.disabled = false;
+    });
+
+    loadSettings().catch((e) => ($("setStatus").textContent = "加载设置失败: " + e));
+  </script>
+</body>
+</html>
