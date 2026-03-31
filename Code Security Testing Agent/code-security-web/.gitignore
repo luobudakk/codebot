@@ -1,0 +1,10 @@
+# runtime data
+data/ui_settings.json
+data/nanobot_runtime.json
+data/pipelines/
+
+# python cache
+app/__pycache__/
+
+# TUI deps
+tui/node_modules/

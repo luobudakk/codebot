@@ -1,0 +1,8 @@
+# uploads from web UI
+uploads/*
+!uploads/.gitkeep
+
+# runtime sessions and memory snapshots
+sessions/*
+memory/*
+
