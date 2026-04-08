@@ -1,71 +1,92 @@
-# Code Security Testing Agent
+# Code Security Runtime（企业级代码安全审查平台）
 
-基于 `nanobot` 架构思想二次开发的代码安全测试智能体项目（不包含上游完整源码）。
+该项目是面向求职展示的企业化安全工程项目，主线是“代码安全审查”，并融合了 `advanced-rag` 的知识检索能力。  
+架构设计参考企业 Runtime 分层方式，强调流程可控、输出可追溯、工程可维护。
 
-本项目聚焦“代码安全审阅”场景，提供：
+## 核心能力
 
-- 安全专用 Agent workspace（规则、角色、技能、playbooks）
-- FastAPI Web 服务（上传代码、分发子任务、汇总结果）
-- Web 界面与可选 TUI 监控
-- 多子任务并发分析流水线（Planner / Coordinator / Worker / Summary）
+- **代码安全审查闭环**：创建审查会话 -> 发起扫描任务 -> 异步作业追踪 -> 输出漏洞与修复建议
+- **风险发现与分级**：覆盖 SQL 注入、命令注入、硬编码密钥、危险执行等高频安全模式
+- **证据化输出**：每条发现包含类别、证据片段、修复建议、规则标识
+- **安全知识 RAG**：支持知识入库与检索，辅助安全判断和修复决策
+- **企业化流程**：预留扩展位（SSE、任务编排、依赖注入、分层模块）
+
+## 架构分层
+
+- `backend/app/contracts.py`：统一 API 契约
+- `backend/app/services.py`：服务容器与业务组装
+- `backend/app/security_runtime.py`：安全审查运行时编排
+- `backend/app/ingestion/*`：文档解析与切块（迁移自 advanced-rag 思路）
+- `backend/app/retrieval/*`：检索与重排（BM25 + 轻量 rerank）
+- `frontend/*`：安全控制台与知识检索控制台
 
 ## 项目结构
 
 ```text
 Code Security Testing Agent/
-├── code-security-agent/       # nanobot 工作区（角色与技能配置）
-│   ├── AGENTS.md
-│   ├── SOUL.md / TOOLS.md / USER.md / HEARTBEAT.md
-│   ├── skills/
-│   └── playbooks/
-├── code-security-web/         # Web 服务与前端页面
-│   ├── app/                   # FastAPI 应用
-│   ├── static/                # 页面静态资源
-│   ├── data/                  # 运行时数据（已忽略）
-│   ├── requirements.txt
-│   ├── start.ps1 / start.bat
-│   └── cli.ps1
-├── CODE_SECURITY_README.md    # 旧版说明（保留）
-└── README.md
+├─ backend/
+│  ├─ app/
+│  │  ├─ ingestion/
+│  │  ├─ retrieval/
+│  │  └─ ...
+│  ├─ tests/
+│  ├─ requirements.txt
+│  ├─ requirements-dev.txt
+│  └─ requirements-optional.txt
+├─ frontend/
+│  ├─ app/
+│  ├─ components/
+│  ├─ lib/
+│  └─ tests/
+├─ docs/security-assets/
+│  ├─ skills/
+│  └─ playbooks/
+├─ .github/workflows/ci.yml
+├─ docker-compose.yml
+└─ .env.example
 ```
 
-## 功能概览
+## 本地运行（Windows）
 
-- **安全多智能体流程**：Planner 拆任务，Coordinator 分配 route，Workers 并行执行，Summary 汇总输出
-- **上传即审阅**：Web 上传代码样本后自动触发审阅流水线
-- **可配置模型/供应商**：支持在 UI 中配置 provider/model/api key
-- **面向安全的技能体系**：静态分析、依赖与供应链、密钥泄露、鉴权与注入等
-
-## 快速开始（Windows）
-
-### 1) 安装依赖
+### 启动后端
 
 ```powershell
-pip install nanobot-ai
+cd "C:\Users\jinziqi\Desktop\2026\Code Security Testing Agent\backend"
+py -3.11 -m pip install -r requirements-dev.txt
+py -3.11 -m uvicorn app.main:app --host 127.0.0.1 --port 8787
 ```
 
-### 2) 启动 Web 服务
+### 启动前端
 
 ```powershell
-cd ".\code-security-web"
-.\start.ps1
+cd "C:\Users\jinziqi\Desktop\2026\Code Security Testing Agent\frontend"
+npm install
+npm run dev
 ```
 
-默认地址：`http://127.0.0.1:8787`
+- API: `http://127.0.0.1:8787`
+- Web: `http://127.0.0.1:3000`
 
-### 3) 在页面配置并运行
+## 测试
 
-- 在页面顶部设置 workspace/provider/model/api key
-- 上传待审阅代码
-- 等待流水线输出分析结果
+### 后端
 
-## 运行脚本
+```powershell
+cd "C:\Users\jinziqi\Desktop\2026\Code Security Testing Agent\backend"
+py -3.11 -m pytest -q
+```
 
-- `code-security-web/start.ps1`：启动 FastAPI 服务
-- `code-security-web/cli.ps1`：命令行运行 web 工具入口
-- `run-code-security-agent.ps1`（如存在于仓库上层历史版本）：直连 nanobot 的 agent/gateway 入口
+### 前端
 
-## 备注
+```powershell
+cd "C:\Users\jinziqi\Desktop\2026\Code Security Testing Agent\frontend"
+npm test -- --runInBand
+```
 
-- 本项目是面向安全测试流程的工程化实现，不是上游 nanobot 的完整镜像仓库。
+## 面向求职的亮点
+
+- 安全业务主线明确：从“检测”到“修复建议”的完整路径
+- 有工程分层与可扩展设计，不是一次性脚本
+- 有测试与 CI，体现可交付能力
+- 融合 RAG 能力，体现 AI 工程能力与安全领域结合
 

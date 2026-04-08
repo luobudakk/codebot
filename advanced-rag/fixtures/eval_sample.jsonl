@@ -1,2 +1,0 @@
-{"id":"e1","question":"Advanced RAG 项目中 Phase B 做了什么？","reference_answer":"包含 Neo4j 写入、向量+BM25+图谱三路检索、可选 rerank、多 namespace 与检索失败回退。"}
-{"id":"e2","question":"未配置 LLM 密钥时前端会看到什么行为？","reference_answer":"演示输出或错误提示，不应假装已调用真实大模型。"}

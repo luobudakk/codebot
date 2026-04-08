@@ -19,6 +19,11 @@ venv/
 *.log
 tmp/
 temp/
+backend/.pytest_cache/
+backend/__pycache__/
+frontend/.next/
+frontend/node_modules/
+frontend/.npm/
 
 # code-security-agent runtime data
 code-security-agent/uploads/*
@@ -26,9 +31,6 @@ code-security-agent/uploads/*
 code-security-agent/sessions/*
 code-security-agent/memory/*
 
-# code-security-web runtime / build data
-code-security-web/data/ui_settings.json
-code-security-web/data/nanobot_runtime.json
-code-security-web/data/pipelines/
-code-security-web/app/__pycache__/
-code-security-web/tui/node_modules/
+# runtime artifacts
+backend/runtime-dev.db
+backend/tmp/
