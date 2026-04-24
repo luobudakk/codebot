@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Codebot Console</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 24px; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+      th { background: #f7f7f7; }
+      .muted { color: #666; }
+    </style>
+  </head>
+  <body>
+    <h1>Codebot Web Console</h1>
+    <p class="muted">Task and report overview</p>
+    <div style="margin-bottom:10px">
+      <label>API Token:
+        <input id="tokenInput" style="width:320px" placeholder="x-codebot-token" />
+      </label>
+      <button id="saveToken" type="button">Save Token</button>
+    </div>
+    <form id="scanForm">
+      <input id="target" placeholder="target path or git url" style="width:420px" />
+      <button type="submit">Create Scan Task</button>
+    </form>
+    <div style="margin:12px 0">
+      <label>Status:
+        <select id="statusFilter">
+          <option value="">all</option>
+          <option value="queued">queued</option>
+          <option value="running">running</option>
+          <option value="succeeded">succeeded</option>
+          <option value="failed">failed</option>
+        </select>
+      </label>
+      <label style="margin-left:8px">Mode:
+        <select id="modeFilter">
+          <option value="">all</option>
+          <option value="scan">scan</option>
+          <option value="fix">fix</option>
+        </select>
+      </label>
+      <button id="refreshBtn" type="button">Refresh</button>
+    </div>
+    <h2>Tasks</h2>
+    <div id="listMeta" class="muted"></div>
+    <div style="margin:8px 0">
+      <button id="prevPage" type="button">Prev</button>
+      <span id="pageMeta" class="muted">Page 1</span>
+      <button id="nextPage" type="button">Next</button>
+    </div>
+    <table>
+      <thead>
+        <tr><th>ID</th><th>Status</th><th>Mode</th><th>Target</th><th>Updated</th><th>Actions</th></tr>
+      </thead>
+      <tbody id="tasks"></tbody>
+    </table>
+    <h2>Task Detail</h2>
+    <pre id="taskDetail" style="background:#f8f8f8;padding:12px;white-space:pre-wrap;">Select a task...</pre>
+    <h2>Report</h2>
+    <pre id="reportDetail" style="background:#f8f8f8;padding:12px;white-space:pre-wrap;">Select a task with report...</pre>
+    <h2>Report Stats</h2>
+    <pre id="reportStats" style="background:#f8f8f8;padding:12px;white-space:pre-wrap;">No report stats yet.</pre>
+    <h2>System Stats</h2>
+    <pre id="systemStats" style="background:#f8f8f8;padding:12px;white-space:pre-wrap;">Loading...</pre>
+    <h2>Admin Token Management</h2>
+    <div style="margin:8px 0">
+      <button id="listTokensBtn" type="button">List Tokens</button>
+      <select id="rotateRole">
+        <option value="operator">operator</option>
+        <option value="viewer">viewer</option>
+        <option value="admin">admin</option>
+      </select>
+      <button id="rotateTokenBtn" type="button">Rotate Token</button>
+    </div>
+    <pre id="tokenAdmin" style="background:#f8f8f8;padding:12px;white-space:pre-wrap;">Admin panel output...</pre>
+    <h2>Audit Logs</h2>
+    <div style="margin:8px 0">
+      <label>Action: <input id="auditAction" placeholder="create_task" /></label>
+      <label>Status:
+        <select id="auditStatus">
+          <option value="">all</option>
+          <option value="ok">ok</option>
+          <option value="denied">denied</option>
+          <option value="error">error</option>
+        </select>
+      </label>
+      <button id="auditQueryBtn" type="button">Query Audit</button>
+    </div>
+    <pre id="auditLogs" style="background:#f8f8f8;padding:12px;white-space:pre-wrap;">Audit output...</pre>
+    <h2>Report Trends</h2>
+    <pre id="reportTrends" style="background:#f8f8f8;padding:12px;white-space:pre-wrap;">Loading...</pre>
+    <canvas id="trendChart" width="900" height="240" style="border:1px solid #ddd;max-width:100%"></canvas>
+    <script>
+      let token = localStorage.getItem("codebot-token") || "dev-token";
+      document.getElementById("tokenInput").value = token;
+      async function listTokens() {
+        const res = await fetch("/api/auth/tokens", { headers: { "x-codebot-token": token } });
+        const body = await res.json();
+        const text = res.ok ? JSON.stringify(body.data, null, 2) : `Failed: ${res.status} ${JSON.stringify(body.error)}`;
+        document.getElementById("tokenAdmin").textContent = text;
+      }
+      async function rotateToken() {
+        const role = document.getElementById("rotateRole").value;
+        const res = await fetch("/api/auth/rotate", {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-codebot-token": token },
+          body: JSON.stringify({ role })
+        });
+        const body = await res.json();
+        const text = res.ok ? JSON.stringify(body.data, null, 2) : `Failed: ${res.status} ${JSON.stringify(body.error)}`;
+        document.getElementById("tokenAdmin").textContent = text;
+      }
+      async function queryAudit() {
+        const action = document.getElementById("auditAction").value;
+        const status = document.getElementById("auditStatus").value;
+        const params = new URLSearchParams({ limit: "100" });
+        if (action) params.set("action", action);
+        if (status) params.set("status", status);
+        const res = await fetch(`/api/audit/recent?${params.toString()}`, { headers: { "x-codebot-token": token } });
+        const body = await res.json();
+        const text = res.ok ? JSON.stringify(body.data, null, 2) : `Failed: ${res.status} ${JSON.stringify(body.error)}`;
+        document.getElementById("auditLogs").textContent = text;
+      }
+      async function refreshMe() {
+        const res = await fetch("/api/me", { headers: { "x-codebot-token": token } });
+        if (!res.ok) return;
+        const body = await res.json();
+        document.getElementById("listMeta").textContent = `Role: ${body.data?.role || "unknown"} | ` + document.getElementById("listMeta").textContent;
+      }
+      let selectedTaskId = "";
+      let offset = 0;
+      let limit = 20;
+      let lastTotal = 0;
+      function buildTaskQuery() {
+        const params = new URLSearchParams();
+        const status = document.getElementById("statusFilter").value;
+        const mode = document.getElementById("modeFilter").value;
+        if (status) params.set("status", status);
+        if (mode) params.set("mode", mode);
+        params.set("limit", String(limit));
+        params.set("offset", String(offset));
+        params.set("sortBy", "updatedAt");
+        params.set("sortOrder", "desc");
+        return params.toString();
+      }
+      function buildReportStats(report) {
+        const findings = Array.isArray(report?.findings) ? report.findings : [];
+        const bySeverity = {};
+        const byRule = {};
+        for (const f of findings) {
+          bySeverity[f.severity] = (bySeverity[f.severity] || 0) + 1;
+          byRule[f.ruleId] = (byRule[f.ruleId] || 0) + 1;
+        }
+        return { findingCount: findings.length, bySeverity, byRule };
+      }
+      async function showTask(taskId) {
+        selectedTaskId = taskId;
+        const res = await fetch(`/api/tasks/${taskId}`, { headers: { "x-codebot-token": token } });
+        const taskBody = await res.json();
+        const task = taskBody.data;
+        document.getElementById("taskDetail").textContent = JSON.stringify(task, null, 2);
+        if (task.resultJsonPath) {
+          const reportRes = await fetch(`/api/reports/${taskId}`, { headers: { "x-codebot-token": token } });
+          if (reportRes.ok) {
+            const reportBody = await reportRes.json();
+            const report = reportBody.data;
+            document.getElementById("reportDetail").textContent = JSON.stringify(report, null, 2);
+            document.getElementById("reportStats").textContent = JSON.stringify(buildReportStats(report), null, 2);
+          } else {
+            document.getElementById("reportDetail").textContent = "Report not available.";
+            document.getElementById("reportStats").textContent = "No report stats yet.";
+          }
+        } else {
+          document.getElementById("reportDetail").textContent = "No report for this task yet.";
+          document.getElementById("reportStats").textContent = "No report stats yet.";
+        }
+      }
+      async function refreshStats() {
+        const [statsRes, trendsRes] = await Promise.all([
+          fetch("/api/stats", { headers: { "x-codebot-token": token } }),
+          fetch("/api/reports/history", { headers: { "x-codebot-token": token } })
+        ]);
+        if (statsRes.ok) {
+          const stats = (await statsRes.json()).data;
+          document.getElementById("systemStats").textContent = JSON.stringify(stats, null, 2);
+        }
+        if (trendsRes.ok) {
+          const trends = (await trendsRes.json()).data;
+          const sorted = trends
+            .slice()
+            .sort((a, b) => String(a.sessionId).localeCompare(String(b.sessionId)))
+            .slice(-10);
+          document.getElementById("reportTrends").textContent = JSON.stringify(sorted, null, 2);
+          drawTrendChart(sorted);
+        }
+      }
+      function drawTrendChart(rows) {
+        const canvas = document.getElementById("trendChart");
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const padding = 30;
+        const w = canvas.width - padding * 2;
+        const h = canvas.height - padding * 2;
+        const values = rows.map((r) => Number(r.findingCount || 0));
+        const max = Math.max(1, ...values);
+        const barW = Math.max(12, Math.floor(w / Math.max(1, rows.length)) - 8);
+        ctx.strokeStyle = "#999";
+        ctx.beginPath();
+        ctx.moveTo(padding, padding);
+        ctx.lineTo(padding, padding + h);
+        ctx.lineTo(padding + w, padding + h);
+        ctx.stroke();
+        rows.forEach((r, i) => {
+          const v = Number(r.findingCount || 0);
+          const bh = Math.floor((v / max) * (h - 20));
+          const x = padding + i * (barW + 8) + 8;
+          const y = padding + h - bh;
+          ctx.fillStyle = "#4e79a7";
+          ctx.fillRect(x, y, barW, bh);
+          ctx.fillStyle = "#333";
+          ctx.font = "11px Arial";
+          ctx.fillText(String(v), x, y - 4);
+        });
+      }
+      async function refresh() {
+        const res = await fetch(`/api/tasks?${buildTaskQuery()}`, { headers: { "x-codebot-token": token } });
+        const payload = await res.json();
+        const data = payload.data || {};
+        const tasks = data.items || [];
+        lastTotal = Number(data.total ?? tasks.length);
+        const page = Math.floor(offset / limit) + 1;
+        const pageCount = Math.max(1, Math.ceil(lastTotal / limit));
+        document.getElementById("listMeta").textContent = `Total: ${lastTotal}, Showing: ${tasks.length}`;
+        document.getElementById("pageMeta").textContent = `Page ${page}/${pageCount}`;
+        const tbody = document.getElementById("tasks");
+        tbody.innerHTML = "";
+        for (const t of tasks) {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `<td>${t.id}</td><td>${t.status}</td><td>${t.mode}</td><td>${t.target}</td><td>${new Date(t.updatedAt).toLocaleString()}</td><td><button data-id="${t.id}">View</button></td>`;
+          tbody.appendChild(tr);
+        }
+        tbody.querySelectorAll("button[data-id]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            await showTask(btn.getAttribute("data-id"));
+          });
+        });
+        if (selectedTaskId) {
+          const hit = tasks.find((t) => t.id === selectedTaskId);
+          if (hit) await showTask(selectedTaskId);
+        }
+        await refreshStats();
+      }
+      document.getElementById("scanForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const target = document.getElementById("target").value;
+        await fetch("/api/tasks", {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-codebot-token": token },
+          body: JSON.stringify({ target, mode: "scan" })
+        });
+        await refresh();
+      });
+      document.getElementById("refreshBtn").addEventListener("click", refresh);
+      document.getElementById("saveToken").addEventListener("click", () => {
+        token = document.getElementById("tokenInput").value.trim();
+        localStorage.setItem("codebot-token", token);
+      });
+      document.getElementById("listTokensBtn").addEventListener("click", listTokens);
+      document.getElementById("rotateTokenBtn").addEventListener("click", rotateToken);
+      document.getElementById("auditQueryBtn").addEventListener("click", queryAudit);
+      document.getElementById("prevPage").addEventListener("click", async () => {
+        offset = Math.max(0, offset - limit);
+        await refresh();
+      });
+      document.getElementById("nextPage").addEventListener("click", async () => {
+        if (offset + limit < lastTotal) offset += limit;
+        await refresh();
+      });
+      document.getElementById("statusFilter").addEventListener("change", refresh);
+      document.getElementById("modeFilter").addEventListener("change", refresh);
+      refresh();
+      refreshMe();
+      setInterval(refresh, 3000);
+    </script>
+  </body>
+  </html>

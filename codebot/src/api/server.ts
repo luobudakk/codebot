@@ -1,0 +1,211 @@
+import express from "express";
+import fs from "node:fs";
+import path from "node:path";
+import { Express } from "express";
+import { CodeQualityBotEngine } from "../core/engine";
+import { loadConfig } from "../utils/config";
+import { Logger } from "../utils/logger";
+import { TaskQueue } from "./task-queue";
+import { createTaskStore } from "./task-store";
+import { TaskListQuery } from "./task-store.types";
+import { AuthManager } from "./auth";
+import { AuditLogStore } from "./audit-log";
+
+function parseTaskListQuery(query: Record<string, unknown>): TaskListQuery {
+  const status = typeof query.status === "string" ? query.status : undefined;
+  const mode = typeof query.mode === "string" ? query.mode : undefined;
+  const offset = Number(query.offset ?? 0);
+  const limit = Number(query.limit ?? 50);
+  const sortBy = query.sortBy === "updatedAt" ? "updatedAt" : "createdAt";
+  const sortOrder = query.sortOrder === "asc" ? "asc" : "desc";
+  return {
+    status: status as TaskListQuery["status"],
+    mode: mode as TaskListQuery["mode"],
+    offset: Number.isFinite(offset) ? Math.max(0, offset) : 0,
+    limit: Number.isFinite(limit) ? Math.max(1, Math.min(200, limit)) : 50,
+    sortBy,
+    sortOrder
+  };
+}
+
+function listReportJsonFiles(reportDir: string): string[] {
+  if (!fs.existsSync(reportDir)) return [];
+  return fs
+    .readdirSync(reportDir)
+    .filter((name) => name.endsWith(".json"))
+    .map((name) => path.join(reportDir, name));
+}
+
+function ok<T>(res: any, data: T): void {
+  res.json({ ok: true, data, error: null });
+}
+
+function fail(res: any, status: number, code: string, message: string): void {
+  res.status(status).json({ ok: false, data: null, error: { code, message } });
+}
+
+export async function createApp(config = loadConfig("config.yaml")): Promise<Express> {
+  const logger = new Logger(config.logLevel);
+  const auth = new AuthManager(config.dataDir, config.apiTokens);
+  const audit = new AuditLogStore(config.dataDir);
+  const store = createTaskStore(config);
+  await store.init();
+  const engine = new CodeQualityBotEngine(config);
+  const queue = new TaskQueue(store, engine, 2);
+
+  const app = express();
+  app.use(express.json({ limit: "1mb" }));
+  app.use((req, _res, next) => {
+    logger.info("api_request", { method: req.method, path: req.path });
+    next();
+  });
+
+  app.use((req, res, next) => {
+    if (req.path.startsWith("/health") || req.path === "/" || req.path === "/api/openapi.json") return next();
+    const token = req.header("x-codebot-token");
+    const role = auth.getRole(token);
+    (req as any).actorRole = role;
+    if (!role) {
+      audit.append({
+        ts: Date.now(),
+        actorRole: "anonymous",
+        action: `${req.method} ${req.path}`,
+        resource: req.path,
+        status: "denied"
+      });
+      fail(res, 401, "AUTH_UNAUTHORIZED", "unauthorized");
+      return;
+    }
+    next();
+  });
+
+  app.get("/health", async (_req, res) => {
+    try {
+      await store.list();
+      ok(res, { name: config.name, ts: Date.now(), taskStoreBackend: config.taskStoreBackend });
+    } catch (error) {
+      fail(res, 500, "STORE_UNAVAILABLE", error instanceof Error ? error.message : String(error));
+    }
+  });
+
+  app.get("/api/me", (req, res) => {
+    ok(res, { role: (req as any).actorRole ?? "anonymous" });
+  });
+
+  app.get("/api/openapi.json", (_req, res) => {
+    ok(res, {
+      openapi: "3.0.0",
+      info: { title: "Codebot API", version: "1.0.0" },
+      paths: {
+        "/health": { get: { summary: "Health check" } },
+        "/api/me": { get: { summary: "Get current role" } },
+        "/api/tasks": { get: { summary: "List tasks" }, post: { summary: "Create task (admin/operator)" } },
+        "/api/tasks/{id}": { get: { summary: "Get task detail" } },
+        "/api/stats": { get: { summary: "Get task/report stats" } },
+        "/api/reports/{taskId}": { get: { summary: "Get report by task" } },
+        "/api/reports/history": { get: { summary: "Get report trend history" } },
+        "/api/auth/tokens": { get: { summary: "List masked tokens (admin)" } },
+        "/api/auth/rotate": { post: { summary: "Rotate token (admin)" } },
+        "/api/audit/recent": { get: { summary: "Query audit logs (admin)" } }
+      }
+    });
+  });
+
+  app.post("/api/tasks", async (req, res) => {
+    const role = (req as any).actorRole as string;
+    if (!["admin", "operator"].includes(role)) return fail(res, 403, "AUTH_FORBIDDEN", "forbidden");
+    const target = String(req.body?.target ?? "").trim();
+    const mode = req.body?.mode === "fix" ? "fix" : "scan";
+    if (!target) return fail(res, 400, "VALIDATION_TARGET_REQUIRED", "target is required");
+    const task = await queue.enqueue(target, mode);
+    audit.append({ ts: Date.now(), actorRole: role, action: "create_task", resource: "/api/tasks", status: "ok" });
+    ok(res, task);
+  });
+
+  app.get("/api/tasks", async (req, res) => {
+    const query = parseTaskListQuery(req.query as Record<string, unknown>);
+    const [rows, total] = await Promise.all([store.list(query), store.count(query)]);
+    ok(res, { items: rows, total, offset: query.offset ?? 0, limit: query.limit ?? 50 });
+  });
+
+  app.get("/api/tasks/:id", async (req, res) => {
+    const task = await store.getById(req.params.id);
+    if (!task) return fail(res, 404, "TASK_NOT_FOUND", "task not found");
+    ok(res, task);
+  });
+
+  app.get("/api/auth/tokens", (req, res) => {
+    if ((req as any).actorRole !== "admin") return fail(res, 403, "AUTH_FORBIDDEN", "forbidden");
+    ok(res, auth.list());
+  });
+
+  app.post("/api/auth/rotate", (req, res) => {
+    const role = (req as any).actorRole as string;
+    if (role !== "admin") return fail(res, 403, "AUTH_FORBIDDEN", "forbidden");
+    const targetRole = req.body?.role === "viewer" ? "viewer" : req.body?.role === "operator" ? "operator" : "admin";
+    const token = auth.rotate(targetRole);
+    audit.append({ ts: Date.now(), actorRole: role, action: "rotate_token", resource: "/api/auth/rotate", status: "ok" });
+    ok(res, { role: token.role, token: token.token });
+  });
+
+  app.get("/api/stats", async (_req, res) => {
+    const [queued, running, succeeded, failed, cancelled] = await Promise.all([
+      store.count({ status: "queued" }),
+      store.count({ status: "running" }),
+      store.count({ status: "succeeded" }),
+      store.count({ status: "failed" }),
+      store.count({ status: "cancelled" })
+    ]);
+    const reportFiles = listReportJsonFiles(config.reportDir);
+    ok(res, { tasks: { queued, running, succeeded, failed, cancelled }, reports: { count: reportFiles.length } });
+  });
+
+  app.get("/api/reports/history", (_req, res) => {
+    const rows = listReportJsonFiles(config.reportDir).map((reportPath) => {
+      const raw = JSON.parse(fs.readFileSync(reportPath, "utf8")) as any;
+      return { sessionId: String(raw.sessionId ?? ""), target: String(raw.target ?? ""), findingCount: Number(raw.findingCount ?? 0) };
+    });
+    ok(res, rows);
+  });
+
+  app.get("/api/reports/:taskId", async (req, res) => {
+    const task = await store.getById(req.params.taskId);
+    if (!task?.resultJsonPath || !fs.existsSync(task.resultJsonPath)) return fail(res, 404, "REPORT_NOT_FOUND", "report not found");
+    ok(res, JSON.parse(fs.readFileSync(task.resultJsonPath, "utf8")));
+  });
+
+  app.get("/api/audit/recent", (req, res) => {
+    if ((req as any).actorRole !== "admin") return fail(res, 403, "AUTH_FORBIDDEN", "forbidden");
+    const limit = Math.max(1, Math.min(500, Number(req.query.limit ?? 100)));
+    const offset = Math.max(0, Number(req.query.offset ?? 0));
+    const action = typeof req.query.action === "string" ? req.query.action : undefined;
+    const status = typeof req.query.status === "string" ? req.query.status : undefined;
+    const actorRole = typeof req.query.actorRole === "string" ? req.query.actorRole : undefined;
+    ok(res, audit.query({ limit, offset, action, status: status as any, actorRole }));
+  });
+
+  app.get("/", (_req, res) => {
+    res.type("text/html").send(fs.readFileSync(path.resolve("src/web/index.html"), "utf8"));
+  });
+
+  app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    fail(res, 500, "INTERNAL_ERROR", err instanceof Error ? err.message : String(err));
+  });
+
+  return app;
+}
+
+async function bootstrap(): Promise<void> {
+  const config = loadConfig("config.yaml");
+  const app = await createApp(config);
+  app.listen(config.apiPort, () => {
+    console.log(`Codebot API on http://localhost:${config.apiPort}`);
+  });
+}
+
+if (require.main === module) {
+  bootstrap().catch((err) => {
+    console.error("Failed to start api:", err);
+    process.exit(1);
+  });
+}

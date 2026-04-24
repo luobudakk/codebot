@@ -1,0 +1,14 @@
+version: "3.9"
+services:
+  codebot-api:
+    image: node:22
+    working_dir: /app
+    volumes:
+      - ./:/app
+    environment:
+      - CODEBOT_API_PORT=8711
+      - CODEBOT_API_TOKEN=dev-token
+      - CODEBOT_TASK_STORE_BACKEND=file
+    ports:
+      - "8711:8711"
+    command: sh -c "npm ci && npm run build && npm run start:api"

@@ -1,0 +1,39 @@
+{
+  "name": "codebot",
+  "version": "1.1.0",
+  "description": "AI-driven automated code quality inspection and assisted fixing bot.",
+  "type": "commonjs",
+  "main": "dist/src/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/src/main.js",
+    "start:api": "node dist/src/api/server.js",
+    "dev:api": "tsx watch src/api/server.ts",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "release:preflight": "node scripts/release-preflight.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "js-yaml": "^4.1.0",
+    "pg": "^8.16.3",
+    "sql.js": "^1.13.0",
+    "simple-git": "^3.28.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.10.0",
+    "@types/pg": "^8.15.5",
+    "@types/sql.js": "^1.4.9",
+    "@types/supertest": "^6.0.3",
+    "supertest": "^7.1.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.8.3",
+    "vitest": "^4.1.2"
+  }
+}

@@ -1,0 +1,50 @@
+app:
+  name: codebot
+  workspace: ./.codebot-workspace
+  report_dir: ./reports
+  data_dir: ./data
+  log_level: info
+  task_store_backend: file
+  postgres_url: ""
+  git_protected_branches: "main,master"
+  git_commit_template: "chore(codebot): apply quality suggestions from automated scan"
+
+analysis:
+  include_extensions: [".ts", ".tsx", ".js", ".py"]
+  max_files: 500
+  max_file_size_kb: 256
+
+llm:
+  provider: mock
+  model: gpt-4o-mini
+  base_url: https://api.openai.com/v1
+
+api:
+  port: 8711
+  token: dev-token
+  tokens:
+    - token: dev-token
+      role: admin
+
+rules:
+  - id: EMPTY_CATCH_OR_BARE_EXCEPT
+    enabled: true
+    languages: ["typescript", "javascript", "python"]
+    severity: high
+    message: 存在空 catch 或裸 except，可能隐藏关键错误。
+    suggestion: 补充错误日志与分类处理，避免吞错。
+    pattern: "catch\\s*\\(\\s*\\)\\s*\\{|except:\\s*"
+  - id: DEBUG_OUTPUT_LEFTOVER
+    enabled: true
+    languages: ["typescript", "javascript", "python"]
+    severity: low
+    message: 发现调试输出语句。
+    suggestion: 改为统一日志组件，并按环境控制输出级别。
+    pattern: "\\bconsole\\.log\\(|\\bprint\\("
+  - id: OVERSIZED_FILE
+    enabled: true
+    languages: ["typescript", "javascript", "python"]
+    severity: medium
+    message: 文件体积过大，维护成本较高。
+    suggestion: 按职责拆分模块，降低耦合。
+    pattern: "__FILE_LINE_COUNT_GT_450__"
