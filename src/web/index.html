@@ -82,6 +82,11 @@
         height: 2px;
         background: var(--primary);
       }
+      .legend-line-heal {
+        width: 24px;
+        height: 2px;
+        background: var(--success);
+      }
       .chart-tooltip {
         position: absolute;
         pointer-events: none;
@@ -200,6 +205,35 @@
       .summary-label { color: var(--sub); font-size: 12px; }
       .summary-value { font-size: 24px; font-weight: 700; margin-top: 4px; }
       .summary-meta { font-size: 12px; color: var(--sub); margin-top: 4px; }
+      .quick-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 10px;
+      }
+      .result-card {
+        border-radius: 12px;
+        border: 1px solid var(--line);
+        padding: 10px 12px;
+        margin-bottom: 10px;
+        background: rgba(120, 144, 196, 0.08);
+      }
+      .result-title {
+        font-weight: 700;
+        margin-bottom: 4px;
+      }
+      .result-ok {
+        border-color: rgba(22, 163, 74, 0.35);
+        background: rgba(22, 163, 74, 0.12);
+      }
+      .result-warn {
+        border-color: rgba(217, 119, 6, 0.35);
+        background: rgba(217, 119, 6, 0.12);
+      }
+      .result-danger {
+        border-color: rgba(220, 38, 38, 0.35);
+        background: rgba(220, 38, 38, 0.12);
+      }
       h2 { margin: 0 0 10px; font-size: 18px; }
       .section-sub { margin: -4px 0 10px; color: var(--sub); font-size: 12px; }
       .muted { color: var(--sub); font-size: 13px; }
@@ -279,6 +313,11 @@
       .status-succeeded { color: #166534; background: #edfdf3; border-color: #bbf7d0; }
       .status-failed { color: #991b1b; background: #fef2f2; border-color: #fecaca; }
       .status-cancelled { color: #7c2d12; background: #fff7ed; border-color: #fed7aa; }
+      .gate-pass { color: #166534; background: #edfdf3; border-color: #bbf7d0; }
+      .gate-conditional_pass { color: #92400e; background: #fffbeb; border-color: #fde68a; }
+      .gate-fail { color: #991b1b; background: #fef2f2; border-color: #fecaca; }
+      .gate-unknown { color: #475569; background: #f1f5f9; border-color: #dbe3ed; }
+      tr.row-gate-fail td { background: rgba(220, 38, 38, 0.07); }
       .chip {
         display: inline-block;
         padding: 2px 8px;
@@ -348,6 +387,33 @@
       }
       .toast.success { border-color: rgba(23, 163, 74, 0.45); }
       .toast.error { border-color: rgba(220, 38, 38, 0.45); }
+      .overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(5, 10, 20, 0.45);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 40;
+      }
+      .overlay.show { display: flex; }
+      .reason-modal {
+        width: min(680px, 92vw);
+        max-height: 78vh;
+        overflow: auto;
+        border-radius: 12px;
+        border: 1px solid var(--line);
+        background: var(--panel);
+        box-shadow: 0 18px 44px rgba(0, 0, 0, 0.28);
+        padding: 14px;
+      }
+      .reason-item {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 8px 10px;
+        margin-top: 8px;
+        background: rgba(120, 144, 196, 0.06);
+      }
       .segmented {
         display: inline-flex;
         border: 1px solid var(--line);
@@ -465,6 +531,31 @@
             <div class="summary-meta">需要优先关注的异常任务</div>
           </div>
         </div>
+        <div class="card span-4">
+          <div class="summary-card">
+            <div class="summary-label">发布风险评估-可发布</div>
+            <div id="summaryHealPass" class="summary-value">-</div>
+            <div class="summary-meta">风险评估结果为“可发布”的会话数</div>
+          </div>
+        </div>
+        <div class="card span-4">
+          <div class="summary-card">
+            <div class="summary-label">发布风险评估-需人工确认</div>
+            <div id="summaryHealConditional" class="summary-value">-</div>
+            <div class="summary-meta">风险评估结果为“需人工确认”的会话数</div>
+          </div>
+        </div>
+        <div class="card span-4">
+          <div class="summary-card">
+            <div class="summary-label">发布风险评估-阻断发布</div>
+            <div id="summaryHealFail" class="summary-value">-</div>
+            <div class="summary-meta">风险评估结果为“阻断发布”的会话数</div>
+            <div class="quick-actions">
+              <button id="focusHealFailBtn" type="button">只看阻断发布</button>
+              <button id="clearHealFocusBtn" type="button" class="ghost">退出快速模式</button>
+            </div>
+          </div>
+        </div>
 
         <div class="card span-6 collapsible">
           <div class="card-header">
@@ -478,6 +569,18 @@
               <input id="tokenInput" style="min-width: 280px; flex: 1" placeholder="请输入 x-codebot-token" />
               <button id="saveToken" type="button" class="primary">保存 Token</button>
             </div>
+            <div class="section-sub" style="margin-top: 10px">运行时大模型配置（无需重启可切换）</div>
+            <div class="form-row">
+              <input id="llmProviderInput" style="min-width: 140px" placeholder="provider: deepseek/openai_compat/anthropic/gemini" />
+              <input id="llmModelInput" style="min-width: 180px" placeholder="model: gpt-4o-mini / deepseek-chat / claude..." />
+              <input id="llmBaseUrlInput" style="min-width: 220px; flex:1" placeholder="base url (可选)" />
+            </div>
+            <div class="form-row" style="margin-top:6px">
+              <input id="llmApiKeyInput" style="min-width: 260px; flex:1" placeholder="可选：本次会话 API Key（不持久化）" />
+              <button id="saveLlmBtn" type="button">保存 AI 配置</button>
+              <button id="testLlmBtn" type="button">测试 AI 连通性</button>
+            </div>
+            <div id="llmStatus" class="muted" style="margin-top:6px">AI 状态：未检测</div>
             <div id="listMeta" class="muted" style="margin-top:8px">正在加载当前角色...</div>
           </div>
         </div>
@@ -498,6 +601,10 @@
             <div class="form-row">
               <input id="uploadFile" type="file" accept=".py,.pdf,.txt,.doc,.docx" />
               <button id="uploadScanBtn" type="button">上传并创建扫描任务</button>
+            </div>
+            <div id="uploadStatus" class="muted" style="margin-top:8px">上传状态：空闲</div>
+            <div style="margin-top:6px">
+              <progress id="uploadProgress" max="100" value="0" style="width: 100%; height: 12px"></progress>
             </div>
           </div>
         </div>
@@ -521,9 +628,27 @@
               <option value="scan">scan</option>
               <option value="fix">fix</option>
             </select>
+            <label>发布风险评估</label>
+            <select id="selfHealFilter">
+              <option value="">全部</option>
+              <option value="pass">可发布</option>
+              <option value="conditional_pass">需人工确认</option>
+              <option value="fail">阻断发布</option>
+              <option value="unknown">未评估</option>
+            </select>
             <button id="refreshBtn" type="button">手动刷新</button>
+            <button id="resetFiltersBtn" type="button" class="ghost">重置全部筛选</button>
             <span id="pageMeta" class="muted">第 1 页</span>
           </div>
+          <div class="section-sub" style="margin-top:8px">阻断发布原因 TopN（批处理视图）</div>
+          <div class="toolbar" style="margin-bottom:8px">
+            <label>阻断原因过滤</label>
+            <select id="failReasonFilter">
+              <option value="">全部原因</option>
+            </select>
+            <button id="clearFailReasonFilterBtn" type="button" class="ghost">清空阻断原因过滤</button>
+          </div>
+          <pre id="failReasonTop">暂无阻断发布统计。</pre>
 
           <div class="table-wrap" style="margin-top: 10px">
             <table>
@@ -532,6 +657,7 @@
                   <th>ID</th>
                   <th>状态</th>
                   <th>模式</th>
+                  <th>发布风险评估</th>
                   <th>目标</th>
                   <th>更新时间</th>
                   <th>操作</th>
@@ -563,17 +689,24 @@
         <div class="card span-4">
           <h2>任务详情</h2>
           <div class="section-sub">展示任务状态、参数和执行结果路径</div>
+          <div id="resultSummary" class="result-card">
+            <div class="result-title">结果总评：待分析</div>
+            <div class="muted">请选择任务后显示质量结论</div>
+          </div>
           <pre id="taskDetail">请选择任务...</pre>
         </div>
         <div class="card span-4">
           <h2>报告详情</h2>
-          <div class="section-sub">报告原始 JSON 内容（便于排查）</div>
+          <div class="section-sub">先看业务化摘要，再看原始 JSON（便于排查）</div>
+          <pre id="reportSummary">请选择含报告的任务...</pre>
           <pre id="reportDetail">请选择含报告的任务...</pre>
         </div>
         <div class="card span-4">
           <h2>报告统计</h2>
           <div class="section-sub">按严重级别与规则聚合统计</div>
           <pre id="reportStats">暂无报告统计。</pre>
+          <div class="section-sub" style="margin-top:8px">发布风险评估与复扫结果（解释：用于判断是否可发布）</div>
+          <pre id="selfHealingStats">暂无发布风险评估统计。</pre>
         </div>
 
         <div class="card span-6">
@@ -591,7 +724,9 @@
           </div>
           <div class="chart-legend">
             <span class="legend-line"></span>
-            <span>最近 10 次会话发现数趋势（可悬停查看精确值）</span>
+            <span>发现数趋势</span>
+            <span class="legend-line-heal"></span>
+            <span>自愈改善率趋势（%）</span>
           </div>
         </div>
 
@@ -650,6 +785,17 @@
       </main>
     </div>
     <div id="toastWrap" class="toast-wrap"></div>
+    <div id="reasonOverlay" class="overlay">
+      <div class="reason-modal">
+        <div class="card-header">
+          <h2 style="margin:0">阻断原因详情</h2>
+          <button id="closeReasonOverlayBtn" type="button" class="ghost">关闭</button>
+        </div>
+        <div class="section-sub">用于解释该任务为何被评估为“阻断发布”。</div>
+        <pre id="reasonModalMeta">请选择任务...</pre>
+        <div id="reasonModalList"></div>
+      </div>
+    </div>
     <script>
       let token = localStorage.getItem("codebot-token") || "dev-token";
       let theme = localStorage.getItem("codebot-theme") || "light";
@@ -667,6 +813,16 @@
 
       function statusClass(status) {
         return `status-${String(status || "").toLowerCase()}`;
+      }
+      function gateClass(gate) {
+        return `gate-${String(gate || "unknown").toLowerCase()}`;
+      }
+      function gateLabel(gate) {
+        const g = String(gate || "unknown");
+        if (g === "pass") return "可发布";
+        if (g === "conditional_pass") return "需人工确认";
+        if (g === "fail") return "阻断发布";
+        return "未评估";
       }
 
       function setTheme(nextTheme) {
@@ -688,11 +844,44 @@
           toast.remove();
         }, 2400);
       }
+      function openReasonModal(payload) {
+        const overlay = document.getElementById("reasonOverlay");
+        document.getElementById("reasonModalMeta").textContent = safeText({
+          会话ID: payload.sessionId,
+          发布风险评估: payload.gateLabel
+        });
+        const list = document.getElementById("reasonModalList");
+        list.innerHTML = "";
+        const reasons = Array.isArray(payload.reasons) ? payload.reasons : [];
+        if (!reasons.length) {
+          const item = document.createElement("div");
+          item.className = "reason-item";
+          item.textContent = "无可展示原因。";
+          list.appendChild(item);
+        } else {
+          reasons.forEach((r, idx) => {
+            const item = document.createElement("div");
+            item.className = "reason-item";
+            item.textContent = `${idx + 1}. ${String(r)}`;
+            list.appendChild(item);
+          });
+        }
+        overlay.classList.add("show");
+      }
+      function closeReasonModal() {
+        document.getElementById("reasonOverlay").classList.remove("show");
+      }
       function toggleSkeleton(show) {
         document.getElementById("taskSkeleton").classList.toggle("show", show);
       }
       function toggleTasksEmpty(show) {
         document.getElementById("tasksEmpty").classList.toggle("show", show);
+      }
+      function setUploadProgress(percent, text) {
+        const p = document.getElementById("uploadProgress");
+        const s = document.getElementById("uploadStatus");
+        p.value = Math.max(0, Math.min(100, Number(percent || 0)));
+        s.textContent = `上传状态：${text}`;
       }
 
       async function listTokens() {
@@ -760,33 +949,56 @@
           showToast("文件大小不能超过 10MB", "error");
           return;
         }
+        setUploadProgress(0, "准备上传...");
         const reader = new FileReader();
         reader.onload = async () => {
           try {
             const dataUrl = String(reader.result || "");
             const idx = dataUrl.indexOf(",");
             const contentBase64 = idx >= 0 ? dataUrl.slice(idx + 1) : dataUrl;
-            const res = await fetch("/api/uploads", {
-              method: "POST",
-              headers: { "content-type": "application/json", "x-codebot-token": token },
-              body: JSON.stringify({ filename: file.name, contentBase64 })
+            setUploadProgress(10, "文件读取完成，开始上传...");
+            const payload = JSON.stringify({ filename: file.name, contentBase64 });
+            const body = await new Promise((resolve, reject) => {
+              const xhr = new XMLHttpRequest();
+              xhr.open("POST", "/api/uploads");
+              xhr.setRequestHeader("content-type", "application/json");
+              xhr.setRequestHeader("x-codebot-token", token);
+              xhr.upload.onprogress = (evt) => {
+                if (!evt.lengthComputable) return;
+                const percent = Math.floor((evt.loaded / evt.total) * 80) + 10;
+                setUploadProgress(percent, `上传中 ${percent}%`);
+              };
+              xhr.onload = () => {
+                try {
+                  const json = JSON.parse(xhr.responseText || "{}");
+                  resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, json });
+                } catch (_err) {
+                  reject(new Error(`响应解析失败: ${xhr.responseText?.slice(0, 120) || "empty"}`));
+                }
+              };
+              xhr.onerror = () => reject(new Error("网络错误"));
+              xhr.send(payload);
             });
-            const body = await res.json();
-            if (!res.ok) {
-              document.getElementById("taskDetail").textContent = formatErr("上传扫描失败", res, body);
+            if (!body.ok) {
+              document.getElementById("taskDetail").textContent = formatErr("上传扫描失败", { status: body.status }, body.json);
+              setUploadProgress(0, "上传失败");
               showToast("上传扫描失败", "error");
               return;
             }
+            setUploadProgress(95, "上传成功，正在创建任务...");
             input.value = "";
             await refresh();
             await refreshUploadHistory();
+            setUploadProgress(100, "已完成");
             showToast("文件上传成功，已创建扫描任务");
           } catch (error) {
             document.getElementById("taskDetail").textContent = `上传扫描异常: ${String(error)}`;
+            setUploadProgress(0, "上传异常");
             showToast("上传扫描异常", "error");
           }
         };
         reader.onerror = () => {
+          setUploadProgress(0, "读取文件失败");
           showToast("读取文件失败", "error");
         };
         reader.readAsDataURL(file);
@@ -817,7 +1029,7 @@
           for (const row of rows) {
             const tr = document.createElement("tr");
             tr.innerHTML = `
-              <td class="cell-target" title="${row.filename}">${row.filename}</td>
+              <td class="cell-target" title="${row.originalFilename || row.filename}">${row.originalFilename || row.filename}</td>
               <td>${formatBytes(row.size)}</td>
               <td>${new Date(row.createdAt).toLocaleString()}</td>
               <td class="cell-id" title="${row.taskId}">${String(row.taskId).slice(0, 14)}...</td>
@@ -839,12 +1051,59 @@
           }
           const body = await res.json();
           currentRole = body.data?.role || "unknown";
-          document.getElementById("listMeta").innerHTML = `当前角色：<span class="chip">${currentRole}</span>`;
-          document.getElementById("welcomeBar").textContent = `欢迎回来，当前角色为 ${currentRole}。你可以在控制台中创建任务、查看报告和审计日志。`;
+          currentProvider = body.data?.llmProvider || "mock";
+          currentModel = body.data?.llmModel || "N/A";
+          document.getElementById("llmProviderInput").value = currentProvider;
+          document.getElementById("llmModelInput").value = currentModel;
+          document.getElementById("llmBaseUrlInput").value = body.data?.llmBaseUrl || "";
+          document.getElementById("llmStatus").textContent = `AI 状态：${body.data?.llmReady ? "可用" : "未配置Key"} (${currentProvider}/${currentModel})`;
+          document.getElementById("listMeta").innerHTML = `当前角色：<span class="chip">${currentRole}</span> | AI引擎：<span class="chip">${currentProvider}/${currentModel}</span>`;
+          document.getElementById("welcomeBar").textContent = `欢迎回来，当前角色为 ${currentRole}。当前 AI 引擎：${currentProvider}/${currentModel}。`;
         } catch (_error) {
           document.getElementById("listMeta").textContent = "角色读取异常，请确认 API 服务可用。";
           document.getElementById("welcomeBar").textContent = "欢迎使用 Codebot。当前角色读取失败，请检查 API Token 或服务状态。";
         }
+      }
+
+      async function saveLlmConfig() {
+        const provider = document.getElementById("llmProviderInput").value.trim();
+        const model = document.getElementById("llmModelInput").value.trim();
+        const baseUrl = document.getElementById("llmBaseUrlInput").value.trim();
+        const apiKey = document.getElementById("llmApiKeyInput").value.trim();
+        if (!provider || !model) {
+          showToast("请填写 provider 和 model", "error");
+          return;
+        }
+        const res = await fetch("/api/llm/config", {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-codebot-token": token },
+          body: JSON.stringify({ provider, model, baseUrl, apiKey })
+        });
+        const body = await res.json();
+        if (!res.ok) {
+          showToast("保存 AI 配置失败", "error");
+          document.getElementById("llmStatus").textContent = `AI 状态：保存失败 (${body?.error?.message || res.status})`;
+          return;
+        }
+        showToast("AI 配置已更新");
+        document.getElementById("llmApiKeyInput").value = "";
+        await refreshMe();
+      }
+
+      async function testLlmConfig() {
+        const res = await fetch("/api/llm/test", {
+          method: "POST",
+          headers: { "x-codebot-token": token }
+        });
+        const body = await res.json();
+        if (!res.ok || !body?.data) {
+          showToast("AI 连通性测试失败", "error");
+          document.getElementById("llmStatus").textContent = `AI 状态：测试失败 (${body?.error?.message || res.status})`;
+          return;
+        }
+        const d = body.data;
+        document.getElementById("llmStatus").textContent = `AI 状态：${d.ok ? "连通成功" : "连通失败"} - ${d.message}`;
+        showToast(d.ok ? "AI 连通性测试通过" : "AI 连通性测试失败", d.ok ? "success" : "error");
       }
 
       let selectedTaskId = "";
@@ -852,9 +1111,81 @@
       let limit = 20;
       let lastTotal = 0;
       let currentRole = "unknown";
+      let currentProvider = "mock";
+      let currentModel = "N/A";
       let globalSearch = "";
       let dashboardView = localStorage.getItem("codebot-dashboard-view") || "cozy";
       let lastTrendPoints = [];
+      let gateDecisionMap = {};
+      let latestFailSessionId = "";
+      let gateReasonsMap = {};
+      let activeFailReasonFilter = "";
+      function loadViewState() {
+        try {
+          const raw = localStorage.getItem("codebot-view-state");
+          if (!raw) return;
+          const s = JSON.parse(raw);
+          if (typeof s.statusFilter === "string") document.getElementById("statusFilter").value = s.statusFilter;
+          if (typeof s.modeFilter === "string") document.getElementById("modeFilter").value = s.modeFilter;
+          if (typeof s.selfHealFilter === "string") document.getElementById("selfHealFilter").value = s.selfHealFilter;
+          if (typeof s.globalSearch === "string") {
+            globalSearch = s.globalSearch;
+            document.getElementById("globalSearch").value = s.globalSearch;
+          }
+          if (Number.isFinite(Number(s.offset)) && Number(s.offset) >= 0) offset = Number(s.offset);
+          if (typeof s.failReasonFilter === "string") activeFailReasonFilter = s.failReasonFilter;
+        } catch (_err) {}
+      }
+      function saveViewState() {
+        const state = {
+          statusFilter: document.getElementById("statusFilter").value || "",
+          modeFilter: document.getElementById("modeFilter").value || "",
+          selfHealFilter: document.getElementById("selfHealFilter").value || "",
+          globalSearch,
+          offset,
+          failReasonFilter: activeFailReasonFilter || ""
+        };
+        localStorage.setItem("codebot-view-state", JSON.stringify(state));
+      }
+      function currentFilterSummary() {
+        const gate = document.getElementById("selfHealFilter")?.value || "all";
+        const reason = activeFailReasonFilter || "all";
+        return `风险评估=${gateLabel(gate === "all" ? "unknown" : gate)}, 原因=${reason}`;
+      }
+      function buildFailReasonTopFromMap() {
+        const counter = {};
+        Object.keys(gateDecisionMap).forEach((sid) => {
+          if (gateDecisionMap[sid] !== "fail") return;
+          const reasons = Array.isArray(gateReasonsMap[sid]) ? gateReasonsMap[sid] : [];
+          if (!reasons.length) {
+            counter["(未提供具体失败原因)"] = (counter["(未提供具体失败原因)"] || 0) + 1;
+            return;
+          }
+          reasons.forEach((r) => {
+            const key = String(r || "").trim() || "(空原因)";
+            counter[key] = (counter[key] || 0) + 1;
+          });
+        });
+        return Object.entries(counter)
+          .sort((a, b) => Number(b[1]) - Number(a[1]))
+          .slice(0, 10)
+          .map(([reason, count]) => ({ reason, count }));
+      }
+      function buildSelfHealingStats(report) {
+        const h = report?.agentAnalysis?.selfHealing;
+        if (!h) return null;
+        const baseline = h.baseline || {};
+        const rescan = h.rescan || null;
+        const improvement = h.improvement || null;
+        return {
+          gateDecision: h.gateDecision || "conditional_pass",
+          autoRescanTriggered: Boolean(h.autoRescanTriggered),
+          reasons: Array.isArray(h.reasons) ? h.reasons : [],
+          baseline,
+          rescan,
+          improvement
+        };
+      }
       function buildTaskQuery() {
         const params = new URLSearchParams();
         const status = document.getElementById("statusFilter").value;
@@ -875,7 +1206,78 @@
           bySeverity[f.severity] = (bySeverity[f.severity] || 0) + 1;
           byRule[f.ruleId] = (byRule[f.ruleId] || 0) + 1;
         }
-        return { findingCount: findings.length, bySeverity, byRule };
+        const high = Number(bySeverity.high || 0);
+        const medium = Number(bySeverity.medium || 0);
+        const low = Number(bySeverity.low || 0);
+        const score = Math.max(0, 100 - high * 20 - medium * 8 - low * 3);
+        const verdict = score >= 85 ? "良好" : score >= 60 ? "需改进" : "风险较高";
+        const selfHealing = buildSelfHealingStats(report);
+        return {
+          findingCount: findings.length,
+          bySeverity,
+          byRule,
+          selfHealing,
+          quality: {
+            score,
+            verdict,
+            summary: `高危 ${high} / 中危 ${medium} / 低危 ${low}`
+          }
+        };
+      }
+      function renderResultSummary(stats) {
+        const box = document.getElementById("resultSummary");
+        const quality = stats?.quality;
+        const high = Number(stats?.bySeverity?.high || 0);
+        const medium = Number(stats?.bySeverity?.medium || 0);
+        const low = Number(stats?.bySeverity?.low || 0);
+        let levelClass = "result-ok";
+        let title = "结果总评：可发布";
+        if (high > 0) {
+          levelClass = "result-danger";
+          title = "结果总评：高风险";
+        } else if (medium > 0 || low > 3) {
+          levelClass = "result-warn";
+          title = "结果总评：需修复";
+        }
+        box.className = `result-card ${levelClass}`;
+        box.innerHTML = `
+          <div class="result-title">${title}</div>
+          <div class="muted">质量分：${quality?.score ?? "-"} / 100，结论：${quality?.verdict ?? "-"}</div>
+          <div class="muted">问题分布：高危 ${high} / 中危 ${medium} / 低危 ${low}</div>
+          <div class="muted">发布风险评估：${gateLabel(stats?.selfHealing?.gateDecision || "unknown")}</div>
+        `;
+      }
+      function renderSelfHealingStats(stats) {
+        const node = document.getElementById("selfHealingStats");
+        const h = stats?.selfHealing;
+        if (!h) {
+          node.textContent = "暂无发布风险评估统计。";
+          return;
+        }
+        node.textContent = safeText({
+          发布风险评估: gateLabel(h.gateDecision),
+          是否触发复扫: h.autoRescanTriggered ? "是" : "否",
+          风险原因: h.reasons,
+          首扫: h.baseline,
+          复扫: h.rescan || "N/A",
+          改善值: h.improvement || "N/A"
+        });
+      }
+      function buildReadableReportSummary(report, stats) {
+        const h = stats?.selfHealing;
+        const reviewer = report?.agentAnalysis?.reviewer || {};
+        const topRules = Object.entries(stats?.byRule || {})
+          .sort((a, b) => Number(b[1]) - Number(a[1]))
+          .slice(0, 3)
+          .map(([rule, hits]) => `${rule}(${hits})`);
+        return {
+          发布建议: gateLabel(h?.gateDecision || "unknown"),
+          质量评分: `${stats?.quality?.score ?? "-"} / 100`,
+          风险结论: stats?.quality?.verdict ?? "N/A",
+          主要问题: topRules.length ? topRules : ["N/A"],
+          下一步动作: Array.isArray(reviewer.nextActions) && reviewer.nextActions.length ? reviewer.nextActions.slice(0, 4) : ["补齐测试并复跑扫描"],
+          发布说明: reviewer.releaseGate || "N/A"
+        };
       }
       async function showTask(taskId) {
         selectedTaskId = taskId;
@@ -893,19 +1295,37 @@
             if (reportRes.ok) {
               const reportBody = await reportRes.json();
               const report = reportBody.data;
+              const stats = buildReportStats(report);
+              const summary = buildReadableReportSummary(report, stats);
+              document.getElementById("reportSummary").textContent = safeText(summary);
               document.getElementById("reportDetail").textContent = safeText(report);
-              document.getElementById("reportStats").textContent = safeText(buildReportStats(report));
+              document.getElementById("reportStats").textContent = safeText(stats);
+              renderResultSummary(stats);
+              renderSelfHealingStats(stats);
             } else {
               const reportErr = await reportRes.json();
+              document.getElementById("reportSummary").textContent = "报告摘要暂不可用。";
               document.getElementById("reportDetail").textContent = formatErr("报告暂不可用", reportRes, reportErr);
               document.getElementById("reportStats").textContent = "暂无报告统计。";
+              document.getElementById("selfHealingStats").textContent = "暂无发布风险评估统计。";
+              document.getElementById("resultSummary").className = "result-card";
+              document.getElementById("resultSummary").innerHTML =
+                `<div class="result-title">结果总评：报告不可用</div><div class="muted">任务已完成但未找到可读取报告</div>`;
             }
           } else {
+            document.getElementById("reportSummary").textContent = "该任务暂无报告摘要。";
             document.getElementById("reportDetail").textContent = "该任务暂无报告。";
             document.getElementById("reportStats").textContent = "暂无报告统计。";
+            document.getElementById("selfHealingStats").textContent = "暂无发布风险评估统计。";
+            document.getElementById("resultSummary").className = "result-card";
+            document.getElementById("resultSummary").innerHTML =
+              `<div class="result-title">结果总评：待分析</div><div class="muted">任务暂无报告，无法生成质量结论</div>`;
           }
         } catch (error) {
           document.getElementById("taskDetail").textContent = `读取任务异常: ${String(error)}`;
+          document.getElementById("resultSummary").className = "result-card result-danger";
+          document.getElementById("resultSummary").innerHTML =
+            `<div class="result-title">结果总评：读取异常</div><div class="muted">请检查 API 服务或任务数据状态</div>`;
         }
       }
 
@@ -918,15 +1338,44 @@
           if (statsRes.ok) {
             const stats = (await statsRes.json()).data;
             document.getElementById("systemStats").textContent = safeText(stats);
-            const summaryTotal = Number(stats?.total ?? stats?.totalTasks ?? stats?.tasksTotal ?? 0);
-            const running = Number(stats?.running ?? stats?.byStatus?.running ?? 0);
-            const failed = Number(stats?.failed ?? stats?.byStatus?.failed ?? 0);
+            const summaryTotal = Number(
+              stats?.total ??
+                stats?.totalTasks ??
+                stats?.tasksTotal ??
+                stats?.tasks?.total ??
+                (Number(stats?.tasks?.queued || 0) +
+                  Number(stats?.tasks?.running || 0) +
+                  Number(stats?.tasks?.succeeded || 0) +
+                  Number(stats?.tasks?.failed || 0) +
+                  Number(stats?.tasks?.cancelled || 0))
+            );
+            const running = Number(stats?.running ?? stats?.byStatus?.running ?? stats?.tasks?.running ?? 0);
+            const failed = Number(stats?.failed ?? stats?.byStatus?.failed ?? stats?.tasks?.failed ?? 0);
             document.getElementById("summaryTotal").textContent = String(summaryTotal);
             document.getElementById("summaryRunning").textContent = String(running);
             document.getElementById("summaryFailed").textContent = String(failed);
           }
           if (trendsRes.ok) {
             const trends = (await trendsRes.json()).data;
+            gateDecisionMap = {};
+            gateReasonsMap = {};
+            latestFailSessionId = "";
+            const gateCounts = { pass: 0, conditional_pass: 0, fail: 0 };
+            trends.forEach((row) => {
+              const sid = String(row.sessionId || "");
+              const gate = String(row?.agentAnalysis?.selfHealing?.gateDecision || "unknown");
+              if (sid) gateDecisionMap[sid] = gate;
+              gateReasonsMap[sid] = Array.isArray(row?.agentAnalysis?.selfHealing?.reasons)
+                ? row.agentAnalysis.selfHealing.reasons
+                : [];
+              if (gate === "fail") latestFailSessionId = sid;
+              if (gate === "pass" || gate === "conditional_pass" || gate === "fail") {
+                gateCounts[gate] += 1;
+              }
+            });
+            document.getElementById("summaryHealPass").textContent = String(gateCounts.pass);
+            document.getElementById("summaryHealConditional").textContent = String(gateCounts.conditional_pass);
+            document.getElementById("summaryHealFail").textContent = String(gateCounts.fail);
             const sorted = trends
               .slice()
               .sort((a, b) => String(a.sessionId).localeCompare(String(b.sessionId)))
@@ -948,8 +1397,15 @@
         const h = canvas.height - padding * 2;
         const values = rows.map((r) => Number(r.findingCount || 0));
         const max = Math.max(1, ...values);
+        const improveRates = rows.map((r) => {
+          const improved = Number(r?.agentAnalysis?.selfHealing?.improvement?.totalReduced ?? 0);
+          const baseTotal = Number(r?.agentAnalysis?.selfHealing?.baseline?.total ?? 0);
+          if (baseTotal <= 0) return 0;
+          return Math.max(0, Math.min(100, Math.round((improved / baseTotal) * 100)));
+        });
         const axis = getComputedStyle(document.body).getPropertyValue("--line").trim() || "#8094bf";
         const lineColor = getComputedStyle(document.body).getPropertyValue("--primary").trim() || "#2d6df6";
+        const healLineColor = getComputedStyle(document.body).getPropertyValue("--success").trim() || "#17a34a";
         const textColor = getComputedStyle(document.body).getPropertyValue("--sub").trim() || "#60708f";
         ctx.strokeStyle = axis;
         ctx.lineWidth = 1;
@@ -964,9 +1420,12 @@
         const step = rows.length > 1 ? w / (rows.length - 1) : w / 2;
         const points = rows.map((r, i) => {
           const v = Number(r.findingCount || 0);
+          const improvePct = improveRates[i];
           const x = padding + i * step;
           const y = padding + h - (v / max) * (h - 8);
-          return { x, y, v, sessionId: String(r.sessionId || `session-${i + 1}`) };
+          const healEquivalent = (improvePct / 100) * max;
+          const healY = padding + h - (healEquivalent / max) * (h - 8);
+          return { x, y, healY, v, improvePct, sessionId: String(r.sessionId || `session-${i + 1}`) };
         });
         lastTrendPoints = points;
         ctx.beginPath();
@@ -977,10 +1436,24 @@
         ctx.strokeStyle = lineColor;
         ctx.lineWidth = 2;
         ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].healY);
+        for (let i = 1; i < points.length; i += 1) {
+          ctx.lineTo(points[i].x, points[i].healY);
+        }
+        ctx.strokeStyle = healLineColor;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 4]);
+        ctx.stroke();
+        ctx.setLineDash([]);
         points.forEach((p) => {
           ctx.beginPath();
           ctx.arc(p.x, p.y, 3.5, 0, Math.PI * 2);
           ctx.fillStyle = lineColor;
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(p.x, p.healY, 3, 0, Math.PI * 2);
+          ctx.fillStyle = healLineColor;
           ctx.fill();
           ctx.fillStyle = textColor;
           ctx.font = "11px sans-serif";
@@ -1006,7 +1479,7 @@
           tip.style.display = "block";
           tip.style.left = `${nearest.x}px`;
           tip.style.top = `${nearest.y}px`;
-          tip.textContent = `${nearest.sessionId} · 发现数 ${nearest.v}`;
+          tip.textContent = `${nearest.sessionId} · 发现数 ${nearest.v} · 改善率 ${nearest.improvePct}%`;
         });
         canvas.addEventListener("mouseleave", () => {
           tip.style.display = "none";
@@ -1016,6 +1489,7 @@
       async function refresh() {
         try {
           toggleSkeleton(true);
+          await refreshStats();
           const res = await fetch(`/api/tasks?${buildTaskQuery()}`, { headers: { "x-codebot-token": token } });
           const payload = await res.json();
           if (!res.ok) {
@@ -1025,28 +1499,71 @@
           }
           const data = payload.data || {};
           const rawTasks = data.items || [];
+          const selfHealFilter = document.getElementById("selfHealFilter").value;
+          const failReasonFilter = activeFailReasonFilter;
           const tasks = rawTasks.filter((t) => {
             if (!globalSearch) return true;
             const blob = `${t.id} ${t.target} ${t.status} ${t.mode}`.toLowerCase();
             return blob.includes(globalSearch.toLowerCase());
+          }).filter((t) => {
+            if (!selfHealFilter) return true;
+            const gate = String(gateDecisionMap[String(t.id)] || "unknown");
+            return gate === selfHealFilter;
+          }).filter((t) => {
+            if (!failReasonFilter) return true;
+            const reasons = Array.isArray(gateReasonsMap[String(t.id)]) ? gateReasonsMap[String(t.id)] : [];
+            return reasons.some((r) => String(r || "").includes(failReasonFilter));
           });
+          const failReasonTop = buildFailReasonTopFromMap();
+          const reasonSelect = document.getElementById("failReasonFilter");
+          const current = reasonSelect.value;
+          reasonSelect.innerHTML = `<option value="">全部原因</option>`;
+          failReasonTop.forEach((item) => {
+            const op = document.createElement("option");
+            op.value = String(item.reason);
+            op.textContent = `${item.reason} (${item.count})`;
+            reasonSelect.appendChild(op);
+          });
+          if ([...reasonSelect.options].some((x) => x.value === current)) {
+            reasonSelect.value = current;
+          } else if ([...reasonSelect.options].some((x) => x.value === activeFailReasonFilter)) {
+            reasonSelect.value = activeFailReasonFilter;
+          } else {
+            reasonSelect.value = "";
+            activeFailReasonFilter = "";
+          }
+          saveViewState();
+          const topNode = document.getElementById("failReasonTop");
+          if (!failReasonTop.length) {
+            topNode.textContent =
+              selfHealFilter === "fail" ? "当前无阻断发布原因数据。" : "切换发布风险评估到“阻断发布”可聚焦问题原因。";
+          } else {
+            topNode.textContent = safeText({
+              阻断发布会话数: Object.values(gateDecisionMap).filter((x) => x === "fail").length,
+              top: failReasonTop
+            });
+          }
           lastTotal = Number(data.total ?? rawTasks.length);
           const page = Math.floor(offset / limit) + 1;
           const pageCount = Math.max(1, Math.ceil(lastTotal / limit));
-          document.getElementById("listMeta").innerHTML = `当前角色：<span class="chip">${currentRole}</span> | 总任务: ${lastTotal}，筛选后: ${tasks.length}`;
+          document.getElementById("listMeta").innerHTML = `当前角色：<span class="chip">${currentRole}</span> | AI引擎：<span class="chip">${currentProvider}/${currentModel}</span> | 总任务: ${lastTotal}，筛选后: ${tasks.length} | 过滤: <span class="chip">${currentFilterSummary()}</span>`;
           document.getElementById("pageMeta").textContent = `第 ${page} / ${pageCount} 页`;
+          document.getElementById("welcomeBar").textContent = `欢迎回来，当前角色为 ${currentRole}。当前 AI 引擎：${currentProvider}/${currentModel}。当前过滤：${currentFilterSummary()}`;
           const tbody = document.getElementById("tasks");
           tbody.innerHTML = "";
           toggleTasksEmpty(tasks.length === 0);
           for (const t of tasks) {
+            const gate = String(gateDecisionMap[String(t.id)] || "unknown");
             const tr = document.createElement("tr");
+            if (gate === "fail") tr.classList.add("row-gate-fail");
             tr.innerHTML = `
               <td class="cell-id" title="${t.id}">${t.id.slice(0, 12)}...</td>
               <td><span class="badge ${statusClass(t.status)}">${t.status}</span></td>
               <td><span class="chip">${t.mode}</span></td>
+              <td><span class="badge ${gateClass(gate)}">${gateLabel(gate)}</span></td>
               <td class="cell-target" title="${t.target}">${t.target}</td>
               <td>${new Date(t.updatedAt).toLocaleString()}</td>
-              <td><button data-id="${t.id}">查看</button></td>`;
+              <td><button data-id="${t.id}">查看</button> <button data-reason-id="${t.id}" class="ghost">阻断原因</button></td>`;
             tbody.appendChild(tr);
           }
           tbody.querySelectorAll("button[data-id]").forEach((btn) => {
@@ -1056,11 +1573,25 @@
               await showTask(btn.getAttribute("data-id"));
             });
           });
-          if (selectedTaskId) {
+          tbody.querySelectorAll("button[data-reason-id]").forEach((btn) => {
+            btn.addEventListener("click", () => {
+              const id = String(btn.getAttribute("data-reason-id") || "");
+              const gate = String(gateDecisionMap[id] || "unknown");
+              const reasons = gateReasonsMap[id] || [];
+              openReasonModal({
+                sessionId: id,
+                gateLabel: gateLabel(gate),
+                reasons: reasons.length ? reasons : ["N/A"]
+              });
+              showToast(gate === "fail" ? "已展开阻断发布原因" : "该任务无阻断发布原因");
+            });
+          });
+          if (!selectedTaskId && tasks.length > 0) {
+            await showTask(tasks[0].id);
+          } else if (selectedTaskId) {
             const hit = tasks.find((t) => t.id === selectedTaskId);
             if (hit) await showTask(selectedTaskId);
           }
-          await refreshStats();
           toggleSkeleton(false);
         } catch (error) {
           document.getElementById("taskDetail").textContent = `刷新异常: ${String(error)}`;
@@ -1091,6 +1622,19 @@
         }
       });
       document.getElementById("refreshBtn").addEventListener("click", refresh);
+      document.getElementById("resetFiltersBtn").addEventListener("click", async () => {
+        document.getElementById("statusFilter").value = "";
+        document.getElementById("modeFilter").value = "";
+        document.getElementById("selfHealFilter").value = "";
+        document.getElementById("failReasonFilter").value = "";
+        document.getElementById("globalSearch").value = "";
+        globalSearch = "";
+        activeFailReasonFilter = "";
+        offset = 0;
+        saveViewState();
+        await refresh();
+        showToast("已重置全部筛选");
+      });
       document.getElementById("saveToken").addEventListener("click", () => {
         token = document.getElementById("tokenInput").value.trim();
         localStorage.setItem("codebot-token", token);
@@ -1100,25 +1644,67 @@
         showToast("Token 已保存");
       });
       document.getElementById("listTokensBtn").addEventListener("click", listTokens);
+      document.getElementById("saveLlmBtn").addEventListener("click", saveLlmConfig);
+      document.getElementById("testLlmBtn").addEventListener("click", testLlmConfig);
       document.getElementById("rotateTokenBtn").addEventListener("click", rotateToken);
       document.getElementById("auditQueryBtn").addEventListener("click", queryAudit);
       document.getElementById("uploadScanBtn").addEventListener("click", uploadAndScan);
       document.getElementById("prevPage").addEventListener("click", async () => {
         offset = Math.max(0, offset - limit);
+        saveViewState();
         await refresh();
       });
       document.getElementById("nextPage").addEventListener("click", async () => {
         if (offset + limit < lastTotal) offset += limit;
+        saveViewState();
         await refresh();
       });
       document.getElementById("statusFilter").addEventListener("change", refresh);
       document.getElementById("modeFilter").addEventListener("change", refresh);
+      document.getElementById("selfHealFilter").addEventListener("change", refresh);
+      document.getElementById("failReasonFilter").addEventListener("change", async (e) => {
+        activeFailReasonFilter = e.target.value || "";
+        offset = 0;
+        saveViewState();
+        await refresh();
+      });
+      document.getElementById("clearFailReasonFilterBtn").addEventListener("click", async () => {
+        activeFailReasonFilter = "";
+        document.getElementById("failReasonFilter").value = "";
+        offset = 0;
+        saveViewState();
+        await refresh();
+      });
+      document.getElementById("focusHealFailBtn").addEventListener("click", async () => {
+        document.getElementById("selfHealFilter").value = "fail";
+        offset = 0;
+        saveViewState();
+        await refresh();
+        if (latestFailSessionId) {
+          await showTask(latestFailSessionId);
+          showToast("已定位到最新阻断发布任务");
+        } else {
+          showToast("当前暂无阻断发布任务");
+        }
+      });
+      document.getElementById("clearHealFocusBtn").addEventListener("click", async () => {
+        document.getElementById("selfHealFilter").value = "";
+        offset = 0;
+        saveViewState();
+        await refresh();
+        showToast("已退出阻断发布快速模式");
+      });
       document.getElementById("globalSearch").addEventListener("input", async (e) => {
         globalSearch = e.target.value.trim();
+        saveViewState();
         await refresh();
       });
       document.getElementById("themeLight").addEventListener("click", () => setTheme("light"));
       document.getElementById("themeDark").addEventListener("click", () => setTheme("dark"));
+      document.getElementById("closeReasonOverlayBtn").addEventListener("click", closeReasonModal);
+      document.getElementById("reasonOverlay").addEventListener("click", (e) => {
+        if (e.target && e.target.id === "reasonOverlay") closeReasonModal();
+      });
       function setDashboardView(view) {
         dashboardView = view;
         localStorage.setItem("codebot-dashboard-view", view);
@@ -1158,6 +1744,7 @@
       });
       setTheme(theme);
       setDashboardView(dashboardView);
+      loadViewState();
       bindChartTooltip();
       refresh();
       refreshMe();

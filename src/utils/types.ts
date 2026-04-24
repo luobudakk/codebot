@@ -71,6 +71,66 @@ export interface RunResult {
   htmlReport: string;
   findingCount: number;
   gitProposalPath?: string;
+  agentAnalysis?: AgentAnalysis;
+}
+
+export interface AgentAnalysis {
+  provider: string;
+  model: string;
+  planner: {
+    objectives: string[];
+    prioritizedRisks: string[];
+    executionPlan: string[];
+  };
+  strategist: {
+    quickWins: string[];
+    deepFixes: string[];
+    testPlan: string[];
+  };
+  reviewer: {
+    readiness: "ready" | "needs_changes" | "blocked";
+    releaseGate: string;
+    residualRisks: string[];
+    nextActions: string[];
+  };
+  executor: {
+    selectedTools: string[];
+    executedTools: Array<{
+      name: string;
+      status: "ok" | "skipped" | "error";
+      summary: string;
+      output: Record<string, unknown>;
+    }>;
+  };
+  selfHealing: {
+    autoRescanTriggered: boolean;
+    gateDecision: "pass" | "conditional_pass" | "fail";
+    reasons: string[];
+    autoActions: string[];
+    baseline: {
+      total: number;
+      high: number;
+      medium: number;
+      low: number;
+    };
+    rescan?: {
+      total: number;
+      high: number;
+      medium: number;
+      low: number;
+    };
+    improvement?: {
+      totalReduced: number;
+      highReduced: number;
+      mediumReduced: number;
+      lowReduced: number;
+    };
+  };
+  raw: {
+    planner: string;
+    strategist: string;
+    reviewer: string;
+  };
 }
 
 export interface TaskRecord {

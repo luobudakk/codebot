@@ -72,7 +72,7 @@ export function loadConfig(configPath: string): AppConfig {
     rules,
     llmProvider: process.env.CODEBOT_LLM_PROVIDER ?? llm.provider ?? "mock",
     llmModel: process.env.CODEBOT_LLM_MODEL ?? llm.model ?? "gpt-4o-mini",
-    llmBaseUrl: llm.base_url ?? "https://api.openai.com/v1",
+    llmBaseUrl: process.env.CODEBOT_LLM_BASE_URL ?? llm.base_url ?? "https://api.openai.com/v1",
     apiPort: Number(process.env.CODEBOT_API_PORT ?? api.port ?? 8711),
     apiToken: process.env.CODEBOT_API_TOKEN ?? api.token ?? "dev-token",
     apiTokens: parsedTokens,

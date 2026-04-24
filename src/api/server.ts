@@ -45,12 +45,13 @@ function fail(res: any, status: number, code: string, message: string): void {
 }
 
 function sanitizeUploadFileName(name: string): string {
-  return name.replace(/[^a-zA-Z0-9._-]/g, "_");
+  return name.replace(/[\\/:*?"<>|\u0000-\u001F]/g, "_");
 }
 
 interface UploadHistoryItem {
   id: string;
   filename: string;
+  originalFilename?: string;
   size: number;
   createdAt: number;
   taskId: string;
@@ -125,7 +126,14 @@ export async function createApp(config = loadConfig("config.yaml")): Promise<Exp
   });
 
   app.get("/api/me", (req, res) => {
-    ok(res, { role: (req as any).actorRole ?? "anonymous" });
+    const llm = engine.getLLMStatus();
+    ok(res, {
+      role: (req as any).actorRole ?? "anonymous",
+      llmProvider: llm.provider,
+      llmModel: llm.model,
+      llmBaseUrl: llm.baseUrl,
+      llmReady: llm.hasApiKey
+    });
   });
 
   app.get("/api/openapi.json", (_req, res) => {
@@ -142,6 +150,8 @@ export async function createApp(config = loadConfig("config.yaml")): Promise<Exp
         "/api/uploads/history": { get: { summary: "List upload history (admin/operator/viewer)" } },
         "/api/reports/{taskId}": { get: { summary: "Get report by task" } },
         "/api/reports/history": { get: { summary: "Get report trend history" } },
+        "/api/llm/config": { get: { summary: "Get runtime llm config" }, post: { summary: "Update runtime llm config (admin)" } },
+        "/api/llm/test": { post: { summary: "Test runtime llm connectivity (admin/operator)" } },
         "/api/auth/tokens": { get: { summary: "List masked tokens (admin)" } },
         "/api/auth/rotate": { post: { summary: "Rotate token (admin)" } },
         "/api/audit/recent": { get: { summary: "Query audit logs (admin)" } }
@@ -188,6 +198,7 @@ export async function createApp(config = loadConfig("config.yaml")): Promise<Exp
     appendUploadHistory(config.dataDir, {
       id: `up-${Math.random().toString(36).slice(2, 10)}`,
       filename: safeName,
+      originalFilename: filename,
       size: binary.length,
       createdAt: Date.now(),
       taskId: task.id,
@@ -202,6 +213,30 @@ export async function createApp(config = loadConfig("config.yaml")): Promise<Exp
     const limit = Math.max(1, Math.min(200, Number(req.query.limit ?? 20)));
     const offset = Math.max(0, Number(req.query.offset ?? 0));
     ok(res, queryUploadHistory(config.dataDir, limit, offset));
+  });
+
+  app.get("/api/llm/config", (req, res) => {
+    ok(res, engine.getLLMStatus());
+  });
+
+  app.post("/api/llm/config", (req, res) => {
+    const role = (req as any).actorRole as string;
+    if (role !== "admin") return fail(res, 403, "AUTH_FORBIDDEN", "forbidden");
+    const provider = String(req.body?.provider ?? "").trim();
+    const model = String(req.body?.model ?? "").trim();
+    const baseUrl = String(req.body?.baseUrl ?? "").trim();
+    const apiKey = String(req.body?.apiKey ?? "").trim();
+    if (!provider || !model) return fail(res, 400, "VALIDATION_LLM_REQUIRED", "provider and model are required");
+    engine.updateLLM({ provider, model, baseUrl, apiKey });
+    audit.append({ ts: Date.now(), actorRole: role, action: "update_llm_config", resource: "/api/llm/config", status: "ok" });
+    ok(res, engine.getLLMStatus());
+  });
+
+  app.post("/api/llm/test", async (req, res) => {
+    const role = (req as any).actorRole as string;
+    if (!["admin", "operator"].includes(role)) return fail(res, 403, "AUTH_FORBIDDEN", "forbidden");
+    const result = await engine.testLLMConnection();
+    ok(res, result);
   });
 
   app.get("/api/tasks", async (req, res) => {
