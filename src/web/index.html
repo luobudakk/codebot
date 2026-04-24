@@ -1,139 +1,860 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Codebot Console</title>
+    <title>Codebot 控制台</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232d6df6'/%3E%3Ctext x='32' y='41' font-size='28' text-anchor='middle' fill='white' font-family='Arial'%3ECB%3C/text%3E%3C/svg%3E" />
     <style>
-      body { font-family: Arial, sans-serif; margin: 24px; }
-      table { border-collapse: collapse; width: 100%; }
-      th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-      th { background: #f7f7f7; }
-      .muted { color: #666; }
+      :root {
+        --bg: #f3f6fb;
+        --panel: #ffffff;
+        --text: #172033;
+        --sub: #60708f;
+        --line: #e2e8f5;
+        --primary: #2d6df6;
+        --primary-dark: #1e56cc;
+        --success: #17a34a;
+        --warn: #d97706;
+        --danger: #dc2626;
+      }
+      body.dark {
+        --bg: #0b1220;
+        --panel: #111a2e;
+        --text: #e6ecff;
+        --sub: #96a5c5;
+        --line: #24314f;
+        --primary: #4d8dff;
+        --primary-dark: #2f73ef;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      }
+      .app-shell {
+        display: flex;
+        min-height: 100vh;
+      }
+      .sidebar {
+        width: 228px;
+        border-right: 1px solid var(--line);
+        background: var(--panel);
+        padding: 16px 12px;
+        position: sticky;
+        top: 0;
+        height: 100vh;
+      }
+      .side-title {
+        font-weight: 700;
+        margin-bottom: 12px;
+      }
+      .side-item {
+        width: 100%;
+        border: 1px solid transparent;
+        padding: 9px 10px;
+        border-radius: 10px;
+        background: transparent;
+        color: var(--sub);
+        text-align: left;
+        margin-bottom: 6px;
+      }
+      .side-item.active {
+        border-color: var(--line);
+        color: var(--text);
+        background: rgba(77, 141, 255, 0.1);
+      }
+      .chart-wrap {
+        position: relative;
+      }
+      .chart-legend {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 8px;
+        color: var(--sub);
+        font-size: 12px;
+      }
+      .legend-line {
+        width: 24px;
+        height: 2px;
+        background: var(--primary);
+      }
+      .chart-tooltip {
+        position: absolute;
+        pointer-events: none;
+        display: none;
+        background: rgba(17, 26, 46, 0.92);
+        color: #fff;
+        border-radius: 8px;
+        padding: 6px 8px;
+        font-size: 12px;
+        transform: translate(-50%, -115%);
+        white-space: nowrap;
+      }
+      .main {
+        flex: 1;
+      }
+      .page {
+        max-width: 1280px;
+        margin: 0 auto;
+        padding: 22px;
+      }
+      .topbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 12px;
+      }
+      .global-search {
+        min-width: 320px;
+        flex: 1;
+      }
+      .hero {
+        background: linear-gradient(120deg, #1f4ec8 0%, #3876ff 65%, #4f8fff 100%);
+        color: #fff;
+        border-radius: 16px;
+        padding: 20px 24px;
+        box-shadow: 0 10px 24px rgba(40, 91, 220, 0.25);
+      }
+      .hero h1 { margin: 0; font-size: 28px; }
+      .hero p { margin: 8px 0 0; opacity: 0.95; }
+      .hero-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+      }
+      .brand-wrap {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .brand-logo {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.18);
+        border: 1px solid rgba(255, 255, 255, 0.35);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+      }
+      .hero-actions {
+        display: flex;
+        gap: 8px;
+      }
+      .grid {
+        margin-top: 18px;
+        display: grid;
+        grid-template-columns: repeat(12, 1fr);
+        gap: 14px;
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 14px;
+        box-shadow: 0 4px 12px rgba(24, 44, 94, 0.06);
+      }
+      .card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+      .card-toggle {
+        border: 1px solid var(--line);
+        background: transparent;
+        color: var(--sub);
+        padding: 4px 8px;
+        border-radius: 8px;
+        font-size: 12px;
+      }
+      .collapsed .card-body {
+        display: none;
+      }
+      .welcome-bar {
+        margin-top: 12px;
+        background: rgba(255, 255, 255, 0.22);
+        border: 1px solid rgba(255, 255, 255, 0.35);
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-size: 13px;
+      }
+      .span-12 { grid-column: span 12; }
+      .span-8 { grid-column: span 8; }
+      .span-6 { grid-column: span 6; }
+      .span-4 { grid-column: span 4; }
+      .summary-card {
+        padding: 12px;
+        border-radius: 12px;
+        border: 1px solid var(--line);
+        background: linear-gradient(180deg, rgba(67, 118, 255, 0.07), rgba(67, 118, 255, 0.02));
+      }
+      .summary-label { color: var(--sub); font-size: 12px; }
+      .summary-value { font-size: 24px; font-weight: 700; margin-top: 4px; }
+      .summary-meta { font-size: 12px; color: var(--sub); margin-top: 4px; }
+      h2 { margin: 0 0 10px; font-size: 18px; }
+      .section-sub { margin: -4px 0 10px; color: var(--sub); font-size: 12px; }
+      .muted { color: var(--sub); font-size: 13px; }
+      .toolbar, .form-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+      }
+      input, select, button {
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        padding: 8px 10px;
+        font-size: 14px;
+        background: #fff;
+      }
+      input:focus, select:focus {
+        outline: 2px solid rgba(45, 109, 246, 0.2);
+        border-color: var(--primary);
+      }
+      button {
+        cursor: pointer;
+        background: #fff;
+      }
+      button.primary {
+        background: var(--primary);
+        border-color: var(--primary);
+        color: #fff;
+      }
+      button.primary:hover { background: var(--primary-dark); }
+      button.ghost {
+        background: transparent;
+        color: var(--sub);
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+      }
+      .table-wrap {
+        overflow-x: auto;
+      }
+      th, td {
+        border-bottom: 1px solid var(--line);
+        padding: 10px 8px;
+        text-align: left;
+        vertical-align: middle;
+        font-size: 13px;
+      }
+      .cell-id {
+        width: 150px;
+        max-width: 150px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .cell-target {
+        max-width: 380px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      th { color: var(--sub); background: #f9fbff; }
+      body.dark th { background: #121e35; }
+      tr:hover td { background: #fafcff; }
+      body.dark tr:hover td { background: #15233d; }
+      tr.row-active td { background: rgba(77, 141, 255, 0.12) !important; }
+      .badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 12px;
+        line-height: 1.6;
+        border: 1px solid transparent;
+      }
+      .status-queued { color: #475569; background: #f1f5f9; border-color: #dbe3ed; }
+      .status-running { color: #1d4ed8; background: #eff6ff; border-color: #bfdbfe; }
+      .status-succeeded { color: #166534; background: #edfdf3; border-color: #bbf7d0; }
+      .status-failed { color: #991b1b; background: #fef2f2; border-color: #fecaca; }
+      .status-cancelled { color: #7c2d12; background: #fff7ed; border-color: #fed7aa; }
+      .chip {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: #eef2ff;
+        color: #3746a3;
+        font-size: 12px;
+      }
+      .empty-state {
+        border: 1px dashed var(--line);
+        border-radius: 12px;
+        padding: 16px;
+        display: none;
+        align-items: center;
+        gap: 12px;
+        margin-top: 10px;
+        color: var(--sub);
+        background: rgba(120, 144, 196, 0.06);
+      }
+      .empty-state.show {
+        display: flex;
+      }
+      .empty-icon {
+        width: 52px;
+        height: 52px;
+        border-radius: 12px;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(180deg, rgba(77, 141, 255, 0.2), rgba(77, 141, 255, 0.08));
+        font-size: 22px;
+      }
+      .skeleton {
+        display: none;
+        margin-top: 10px;
+      }
+      .skeleton.show { display: block; }
+      .skeleton-row {
+        height: 14px;
+        border-radius: 8px;
+        margin: 10px 0;
+        background: linear-gradient(90deg, rgba(128, 148, 191, 0.15) 25%, rgba(128, 148, 191, 0.3) 45%, rgba(128, 148, 191, 0.15) 65%);
+        background-size: 300% 100%;
+        animation: shimmer 1.3s infinite;
+      }
+      @keyframes shimmer {
+        0% { background-position: 100% 0; }
+        100% { background-position: 0 0; }
+      }
+      .toast-wrap {
+        position: fixed;
+        right: 18px;
+        bottom: 18px;
+        z-index: 30;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        max-width: 360px;
+      }
+      .toast {
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: var(--panel);
+        color: var(--text);
+        padding: 10px 12px;
+        box-shadow: 0 8px 18px rgba(16, 28, 58, 0.2);
+        font-size: 13px;
+      }
+      .toast.success { border-color: rgba(23, 163, 74, 0.45); }
+      .toast.error { border-color: rgba(220, 38, 38, 0.45); }
+      .segmented {
+        display: inline-flex;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+      .segmented button {
+        border: 0;
+        border-right: 1px solid var(--line);
+        border-radius: 0;
+        padding: 7px 10px;
+      }
+      .segmented button:last-child { border-right: 0; }
+      .segmented button.active {
+        background: rgba(77, 141, 255, 0.12);
+        color: var(--primary);
+      }
+      body.compact .card { padding: 10px; }
+      body.compact .section-sub { display: none; }
+      body.compact .summary-value { font-size: 20px; }
+      pre {
+        margin: 0;
+        background: #f7f9fc;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 12px;
+        white-space: pre-wrap;
+        max-height: 300px;
+        overflow: auto;
+        font-size: 12px;
+      }
+      .pagination {
+        margin-top: 8px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      canvas {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        max-width: 100%;
+        background: var(--panel);
+      }
+      @media (max-width: 1080px) {
+        .sidebar { display: none; }
+        .span-8, .span-6, .span-4 { grid-column: span 12; }
+      }
+      @media (max-width: 760px) {
+        .page { padding: 12px; }
+        .hero { padding: 14px; }
+        .hero h1 { font-size: 20px; }
+        .hero-top { flex-direction: column; align-items: flex-start; }
+        .summary-value { font-size: 20px; }
+        .empty-state { flex-direction: column; align-items: flex-start; }
+      }
     </style>
   </head>
   <body>
-    <h1>Codebot Web Console</h1>
-    <p class="muted">Task and report overview</p>
-    <div style="margin-bottom:10px">
-      <label>API Token:
-        <input id="tokenInput" style="width:320px" placeholder="x-codebot-token" />
-      </label>
-      <button id="saveToken" type="button">Save Token</button>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="side-title">Codebot 控制台</div>
+        <button class="side-item active" type="button" data-nav-target="overviewSection">总览仪表盘</button>
+        <button class="side-item" type="button" data-nav-target="tasksSection">任务中心</button>
+        <button class="side-item" type="button" data-nav-target="trendSection">报告趋势</button>
+        <button class="side-item" type="button" data-nav-target="adminSection">审计与凭证</button>
+        <button class="side-item" type="button" data-nav-target="uploadHistorySection">上传历史</button>
+      </aside>
+      <main class="main">
+    <div class="page">
+      <div class="topbar">
+        <input id="globalSearch" class="global-search" placeholder="全局搜索任务 ID / 目标路径 / 状态 / 模式" />
+        <div class="segmented">
+          <button id="viewCozy" type="button">舒适布局</button>
+          <button id="viewCompact" type="button">紧凑布局</button>
+        </div>
+      </div>
+      <section class="hero">
+        <div class="hero-top">
+          <div class="brand-wrap">
+            <div class="brand-logo">CB</div>
+            <div>
+              <h1>Codebot 中文控制台</h1>
+              <p>代码质量巡检、任务调度、报告趋势与审计治理一体化视图</p>
+            </div>
+          </div>
+          <div class="hero-actions">
+            <div class="segmented">
+              <button id="themeLight" type="button">浅色</button>
+              <button id="themeDark" type="button">深色</button>
+            </div>
+          </div>
+        </div>
+        <div class="welcome-bar" id="welcomeBar">欢迎使用 Codebot。正在同步你的身份与任务状态...</div>
+      </section>
+
+      <section class="grid">
+        <div id="overviewSection" class="card span-4">
+          <div class="summary-card">
+            <div class="summary-label">任务总数</div>
+            <div id="summaryTotal" class="summary-value">-</div>
+            <div class="summary-meta">当前工作空间总体任务量</div>
+          </div>
+        </div>
+        <div class="card span-4">
+          <div class="summary-card">
+            <div class="summary-label">运行中任务</div>
+            <div id="summaryRunning" class="summary-value">-</div>
+            <div class="summary-meta">正在执行中的任务数量</div>
+          </div>
+        </div>
+        <div class="card span-4">
+          <div class="summary-card">
+            <div class="summary-label">失败任务</div>
+            <div id="summaryFailed" class="summary-value">-</div>
+            <div class="summary-meta">需要优先关注的异常任务</div>
+          </div>
+        </div>
+
+        <div class="card span-6 collapsible">
+          <div class="card-header">
+            <h2>身份与访问</h2>
+            <button class="card-toggle" type="button" data-toggle-card>折叠</button>
+          </div>
+          <div class="card-body">
+            <div class="section-sub">管理访问凭证与当前登录角色状态</div>
+            <div class="form-row">
+              <label>API Token</label>
+              <input id="tokenInput" style="min-width: 280px; flex: 1" placeholder="请输入 x-codebot-token" />
+              <button id="saveToken" type="button" class="primary">保存 Token</button>
+            </div>
+            <div id="listMeta" class="muted" style="margin-top:8px">正在加载当前角色...</div>
+          </div>
+        </div>
+
+        <div class="card span-6 collapsible">
+          <div class="card-header">
+            <h2>新建扫描任务</h2>
+            <button class="card-toggle" type="button" data-toggle-card>折叠</button>
+          </div>
+          <div class="card-body">
+            <div class="section-sub">快速发起新的扫描任务并自动回填到列表</div>
+            <form id="scanForm" class="form-row">
+              <input id="target" style="min-width: 320px; flex: 1" placeholder="目标路径或 Git 仓库地址" />
+              <button type="submit" class="primary">创建扫描任务</button>
+            </form>
+            <div class="muted" style="margin-top:8px">默认模式为 scan。任务提交后会自动刷新列表。</div>
+            <div class="section-sub" style="margin-top: 12px">或上传单个文件进行扫描（支持 .py / .pdf / .txt / .doc / .docx，最大 10MB）</div>
+            <div class="form-row">
+              <input id="uploadFile" type="file" accept=".py,.pdf,.txt,.doc,.docx" />
+              <button id="uploadScanBtn" type="button">上传并创建扫描任务</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="tasksSection" class="card span-12">
+          <h2>任务列表</h2>
+          <div class="section-sub">支持分页、筛选、状态标记与任务详情钻取</div>
+          <div class="toolbar">
+            <label>状态</label>
+            <select id="statusFilter">
+              <option value="">全部</option>
+              <option value="queued">queued</option>
+              <option value="running">running</option>
+              <option value="succeeded">succeeded</option>
+              <option value="failed">failed</option>
+              <option value="cancelled">cancelled</option>
+            </select>
+            <label>模式</label>
+            <select id="modeFilter">
+              <option value="">全部</option>
+              <option value="scan">scan</option>
+              <option value="fix">fix</option>
+            </select>
+            <button id="refreshBtn" type="button">手动刷新</button>
+            <span id="pageMeta" class="muted">第 1 页</span>
+          </div>
+
+          <div class="table-wrap" style="margin-top: 10px">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>状态</th>
+                  <th>模式</th>
+                  <th>目标</th>
+                  <th>更新时间</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="tasks"></tbody>
+            </table>
+          </div>
+          <div id="taskSkeleton" class="skeleton">
+            <div class="skeleton-row"></div>
+            <div class="skeleton-row" style="width:88%"></div>
+            <div class="skeleton-row" style="width:92%"></div>
+            <div class="skeleton-row" style="width:75%"></div>
+          </div>
+          <div id="tasksEmpty" class="empty-state">
+            <div class="empty-icon">🗂️</div>
+            <div>
+              <div style="font-weight: 600; color: var(--text)">当前筛选条件下暂无任务</div>
+              <div class="muted">你可以清空筛选条件，或创建新的扫描任务。</div>
+            </div>
+          </div>
+
+          <div class="pagination">
+            <button id="prevPage" type="button">上一页</button>
+            <button id="nextPage" type="button">下一页</button>
+          </div>
+        </div>
+
+        <div class="card span-4">
+          <h2>任务详情</h2>
+          <div class="section-sub">展示任务状态、参数和执行结果路径</div>
+          <pre id="taskDetail">请选择任务...</pre>
+        </div>
+        <div class="card span-4">
+          <h2>报告详情</h2>
+          <div class="section-sub">报告原始 JSON 内容（便于排查）</div>
+          <pre id="reportDetail">请选择含报告的任务...</pre>
+        </div>
+        <div class="card span-4">
+          <h2>报告统计</h2>
+          <div class="section-sub">按严重级别与规则聚合统计</div>
+          <pre id="reportStats">暂无报告统计。</pre>
+        </div>
+
+        <div class="card span-6">
+          <h2>系统统计</h2>
+          <div class="section-sub">平台聚合指标与任务分布</div>
+          <pre id="systemStats">加载中...</pre>
+        </div>
+        <div id="trendSection" class="card span-6">
+          <h2>报告趋势</h2>
+          <div class="section-sub">最近会话发现数变化趋势</div>
+          <pre id="reportTrends">加载中...</pre>
+          <div class="chart-wrap" style="margin-top:10px">
+            <canvas id="trendChart" width="900" height="240"></canvas>
+            <div id="chartTooltip" class="chart-tooltip"></div>
+          </div>
+          <div class="chart-legend">
+            <span class="legend-line"></span>
+            <span>最近 10 次会话发现数趋势（可悬停查看精确值）</span>
+          </div>
+        </div>
+
+        <div id="adminSection" class="card span-6">
+          <h2>管理员 Token 管理</h2>
+          <div class="section-sub">查看 token 列表并按角色轮换</div>
+          <div class="toolbar">
+            <button id="listTokensBtn" type="button">查看 Token 列表</button>
+            <select id="rotateRole">
+              <option value="operator">operator</option>
+              <option value="viewer">viewer</option>
+              <option value="admin">admin</option>
+            </select>
+            <button id="rotateTokenBtn" type="button">轮换指定角色 Token</button>
+          </div>
+          <pre id="tokenAdmin" style="margin-top:10px">管理员面板输出...</pre>
+        </div>
+
+        <div class="card span-6">
+          <h2>审计日志查询</h2>
+          <div class="section-sub">按动作/状态过滤关键操作记录</div>
+          <div class="toolbar">
+            <label>动作</label>
+            <input id="auditAction" placeholder="例如 create_task" />
+            <label>状态</label>
+            <select id="auditStatus">
+              <option value="">全部</option>
+              <option value="ok">ok</option>
+              <option value="denied">denied</option>
+              <option value="error">error</option>
+            </select>
+            <button id="auditQueryBtn" type="button">查询审计日志</button>
+          </div>
+          <pre id="auditLogs" style="margin-top:10px">审计输出...</pre>
+        </div>
+        <div id="uploadHistorySection" class="card span-12">
+          <h2>上传历史</h2>
+          <div class="section-sub">最近上传文件、大小、创建时间和关联任务</div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>文件名</th>
+                  <th>大小</th>
+                  <th>创建时间</th>
+                  <th>关联任务 ID</th>
+                  <th>角色</th>
+                </tr>
+              </thead>
+              <tbody id="uploadHistoryRows"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
     </div>
-    <form id="scanForm">
-      <input id="target" placeholder="target path or git url" style="width:420px" />
-      <button type="submit">Create Scan Task</button>
-    </form>
-    <div style="margin:12px 0">
-      <label>Status:
-        <select id="statusFilter">
-          <option value="">all</option>
-          <option value="queued">queued</option>
-          <option value="running">running</option>
-          <option value="succeeded">succeeded</option>
-          <option value="failed">failed</option>
-        </select>
-      </label>
-      <label style="margin-left:8px">Mode:
-        <select id="modeFilter">
-          <option value="">all</option>
-          <option value="scan">scan</option>
-          <option value="fix">fix</option>
-        </select>
-      </label>
-      <button id="refreshBtn" type="button">Refresh</button>
+      </main>
     </div>
-    <h2>Tasks</h2>
-    <div id="listMeta" class="muted"></div>
-    <div style="margin:8px 0">
-      <button id="prevPage" type="button">Prev</button>
-      <span id="pageMeta" class="muted">Page 1</span>
-      <button id="nextPage" type="button">Next</button>
-    </div>
-    <table>
-      <thead>
-        <tr><th>ID</th><th>Status</th><th>Mode</th><th>Target</th><th>Updated</th><th>Actions</th></tr>
-      </thead>
-      <tbody id="tasks"></tbody>
-    </table>
-    <h2>Task Detail</h2>
-    <pre id="taskDetail" style="background:#f8f8f8;padding:12px;white-space:pre-wrap;">Select a task...</pre>
-    <h2>Report</h2>
-    <pre id="reportDetail" style="background:#f8f8f8;padding:12px;white-space:pre-wrap;">Select a task with report...</pre>
-    <h2>Report Stats</h2>
-    <pre id="reportStats" style="background:#f8f8f8;padding:12px;white-space:pre-wrap;">No report stats yet.</pre>
-    <h2>System Stats</h2>
-    <pre id="systemStats" style="background:#f8f8f8;padding:12px;white-space:pre-wrap;">Loading...</pre>
-    <h2>Admin Token Management</h2>
-    <div style="margin:8px 0">
-      <button id="listTokensBtn" type="button">List Tokens</button>
-      <select id="rotateRole">
-        <option value="operator">operator</option>
-        <option value="viewer">viewer</option>
-        <option value="admin">admin</option>
-      </select>
-      <button id="rotateTokenBtn" type="button">Rotate Token</button>
-    </div>
-    <pre id="tokenAdmin" style="background:#f8f8f8;padding:12px;white-space:pre-wrap;">Admin panel output...</pre>
-    <h2>Audit Logs</h2>
-    <div style="margin:8px 0">
-      <label>Action: <input id="auditAction" placeholder="create_task" /></label>
-      <label>Status:
-        <select id="auditStatus">
-          <option value="">all</option>
-          <option value="ok">ok</option>
-          <option value="denied">denied</option>
-          <option value="error">error</option>
-        </select>
-      </label>
-      <button id="auditQueryBtn" type="button">Query Audit</button>
-    </div>
-    <pre id="auditLogs" style="background:#f8f8f8;padding:12px;white-space:pre-wrap;">Audit output...</pre>
-    <h2>Report Trends</h2>
-    <pre id="reportTrends" style="background:#f8f8f8;padding:12px;white-space:pre-wrap;">Loading...</pre>
-    <canvas id="trendChart" width="900" height="240" style="border:1px solid #ddd;max-width:100%"></canvas>
+    <div id="toastWrap" class="toast-wrap"></div>
     <script>
       let token = localStorage.getItem("codebot-token") || "dev-token";
+      let theme = localStorage.getItem("codebot-theme") || "light";
       document.getElementById("tokenInput").value = token;
-      async function listTokens() {
-        const res = await fetch("/api/auth/tokens", { headers: { "x-codebot-token": token } });
-        const body = await res.json();
-        const text = res.ok ? JSON.stringify(body.data, null, 2) : `Failed: ${res.status} ${JSON.stringify(body.error)}`;
-        document.getElementById("tokenAdmin").textContent = text;
+      if (theme === "dark") document.body.classList.add("dark");
+
+      function safeText(payload, fallback = "请求失败") {
+        if (payload === null || payload === undefined) return fallback;
+        return JSON.stringify(payload, null, 2);
       }
+
+      function formatErr(prefix, res, body) {
+        return `${prefix} (${res.status})\n${safeText(body?.error || body, "无错误详情")}`;
+      }
+
+      function statusClass(status) {
+        return `status-${String(status || "").toLowerCase()}`;
+      }
+
+      function setTheme(nextTheme) {
+        theme = nextTheme;
+        localStorage.setItem("codebot-theme", nextTheme);
+        document.body.classList.toggle("dark", nextTheme === "dark");
+        const lightBtn = document.getElementById("themeLight");
+        const darkBtn = document.getElementById("themeDark");
+        lightBtn.classList.toggle("active", nextTheme === "light");
+        darkBtn.classList.toggle("active", nextTheme === "dark");
+      }
+      function showToast(message, kind = "success") {
+        const wrap = document.getElementById("toastWrap");
+        const toast = document.createElement("div");
+        toast.className = `toast ${kind}`;
+        toast.textContent = message;
+        wrap.appendChild(toast);
+        setTimeout(() => {
+          toast.remove();
+        }, 2400);
+      }
+      function toggleSkeleton(show) {
+        document.getElementById("taskSkeleton").classList.toggle("show", show);
+      }
+      function toggleTasksEmpty(show) {
+        document.getElementById("tasksEmpty").classList.toggle("show", show);
+      }
+
+      async function listTokens() {
+        try {
+          const res = await fetch("/api/auth/tokens", { headers: { "x-codebot-token": token } });
+          const body = await res.json();
+          const text = res.ok ? safeText(body.data) : formatErr("查询 Token 失败", res, body);
+          document.getElementById("tokenAdmin").textContent = text;
+          if (res.ok) showToast("Token 列表查询完成");
+        } catch (error) {
+          document.getElementById("tokenAdmin").textContent = `查询异常: ${String(error)}`;
+          showToast("Token 列表查询失败", "error");
+        }
+      }
+
       async function rotateToken() {
         const role = document.getElementById("rotateRole").value;
-        const res = await fetch("/api/auth/rotate", {
-          method: "POST",
-          headers: { "content-type": "application/json", "x-codebot-token": token },
-          body: JSON.stringify({ role })
-        });
-        const body = await res.json();
-        const text = res.ok ? JSON.stringify(body.data, null, 2) : `Failed: ${res.status} ${JSON.stringify(body.error)}`;
-        document.getElementById("tokenAdmin").textContent = text;
+        try {
+          const res = await fetch("/api/auth/rotate", {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-codebot-token": token },
+            body: JSON.stringify({ role })
+          });
+          const body = await res.json();
+          const text = res.ok ? safeText(body.data) : formatErr("轮换 Token 失败", res, body);
+          document.getElementById("tokenAdmin").textContent = text;
+          if (res.ok) showToast(`已完成 ${role} 角色 Token 轮换`);
+        } catch (error) {
+          document.getElementById("tokenAdmin").textContent = `轮换异常: ${String(error)}`;
+          showToast("Token 轮换失败", "error");
+        }
       }
+
       async function queryAudit() {
         const action = document.getElementById("auditAction").value;
         const status = document.getElementById("auditStatus").value;
         const params = new URLSearchParams({ limit: "100" });
         if (action) params.set("action", action);
         if (status) params.set("status", status);
-        const res = await fetch(`/api/audit/recent?${params.toString()}`, { headers: { "x-codebot-token": token } });
-        const body = await res.json();
-        const text = res.ok ? JSON.stringify(body.data, null, 2) : `Failed: ${res.status} ${JSON.stringify(body.error)}`;
-        document.getElementById("auditLogs").textContent = text;
+        try {
+          const res = await fetch(`/api/audit/recent?${params.toString()}`, { headers: { "x-codebot-token": token } });
+          const body = await res.json();
+          const text = res.ok ? safeText(body.data) : formatErr("审计查询失败", res, body);
+          document.getElementById("auditLogs").textContent = text;
+          if (res.ok) showToast("审计日志查询完成");
+        } catch (error) {
+          document.getElementById("auditLogs").textContent = `查询异常: ${String(error)}`;
+          showToast("审计日志查询失败", "error");
+        }
       }
+
+      async function uploadAndScan() {
+        const input = document.getElementById("uploadFile");
+        const file = input.files && input.files[0];
+        if (!file) {
+          showToast("请先选择要上传的文件", "error");
+          return;
+        }
+        const lower = file.name.toLowerCase();
+        if (!(lower.endsWith(".py") || lower.endsWith(".pdf") || lower.endsWith(".txt") || lower.endsWith(".doc") || lower.endsWith(".docx"))) {
+          showToast("仅支持 .py/.pdf/.txt/.doc/.docx", "error");
+          return;
+        }
+        if (file.size > 10 * 1024 * 1024) {
+          showToast("文件大小不能超过 10MB", "error");
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = async () => {
+          try {
+            const dataUrl = String(reader.result || "");
+            const idx = dataUrl.indexOf(",");
+            const contentBase64 = idx >= 0 ? dataUrl.slice(idx + 1) : dataUrl;
+            const res = await fetch("/api/uploads", {
+              method: "POST",
+              headers: { "content-type": "application/json", "x-codebot-token": token },
+              body: JSON.stringify({ filename: file.name, contentBase64 })
+            });
+            const body = await res.json();
+            if (!res.ok) {
+              document.getElementById("taskDetail").textContent = formatErr("上传扫描失败", res, body);
+              showToast("上传扫描失败", "error");
+              return;
+            }
+            input.value = "";
+            await refresh();
+            await refreshUploadHistory();
+            showToast("文件上传成功，已创建扫描任务");
+          } catch (error) {
+            document.getElementById("taskDetail").textContent = `上传扫描异常: ${String(error)}`;
+            showToast("上传扫描异常", "error");
+          }
+        };
+        reader.onerror = () => {
+          showToast("读取文件失败", "error");
+        };
+        reader.readAsDataURL(file);
+      }
+
+      function formatBytes(size) {
+        const n = Number(size || 0);
+        if (n < 1024) return `${n} B`;
+        if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+        return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+      }
+
+      async function refreshUploadHistory() {
+        const tbody = document.getElementById("uploadHistoryRows");
+        try {
+          const res = await fetch("/api/uploads/history?limit=20&offset=0", { headers: { "x-codebot-token": token } });
+          const body = await res.json();
+          if (!res.ok) {
+            tbody.innerHTML = `<tr><td colspan="5">读取上传历史失败</td></tr>`;
+            return;
+          }
+          const rows = body.data?.items || [];
+          if (!rows.length) {
+            tbody.innerHTML = `<tr><td colspan="5">暂无上传记录</td></tr>`;
+            return;
+          }
+          tbody.innerHTML = "";
+          for (const row of rows) {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+              <td class="cell-target" title="${row.filename}">${row.filename}</td>
+              <td>${formatBytes(row.size)}</td>
+              <td>${new Date(row.createdAt).toLocaleString()}</td>
+              <td class="cell-id" title="${row.taskId}">${String(row.taskId).slice(0, 14)}...</td>
+              <td><span class="chip">${row.actorRole || "unknown"}</span></td>
+            `;
+            tbody.appendChild(tr);
+          }
+        } catch (_error) {
+          tbody.innerHTML = `<tr><td colspan="5">读取上传历史异常</td></tr>`;
+        }
+      }
+
       async function refreshMe() {
-        const res = await fetch("/api/me", { headers: { "x-codebot-token": token } });
-        if (!res.ok) return;
-        const body = await res.json();
-        document.getElementById("listMeta").textContent = `Role: ${body.data?.role || "unknown"} | ` + document.getElementById("listMeta").textContent;
+        try {
+          const res = await fetch("/api/me", { headers: { "x-codebot-token": token } });
+          if (!res.ok) {
+            document.getElementById("listMeta").textContent = "角色读取失败，请检查 Token。";
+            return;
+          }
+          const body = await res.json();
+          currentRole = body.data?.role || "unknown";
+          document.getElementById("listMeta").innerHTML = `当前角色：<span class="chip">${currentRole}</span>`;
+          document.getElementById("welcomeBar").textContent = `欢迎回来，当前角色为 ${currentRole}。你可以在控制台中创建任务、查看报告和审计日志。`;
+        } catch (_error) {
+          document.getElementById("listMeta").textContent = "角色读取异常，请确认 API 服务可用。";
+          document.getElementById("welcomeBar").textContent = "欢迎使用 Codebot。当前角色读取失败，请检查 API Token 或服务状态。";
+        }
       }
+
       let selectedTaskId = "";
       let offset = 0;
       let limit = 20;
       let lastTotal = 0;
+      let currentRole = "unknown";
+      let globalSearch = "";
+      let dashboardView = localStorage.getItem("codebot-dashboard-view") || "cozy";
+      let lastTrendPoints = [];
       function buildTaskQuery() {
         const params = new URLSearchParams();
         const status = document.getElementById("statusFilter").value;
@@ -158,45 +879,66 @@
       }
       async function showTask(taskId) {
         selectedTaskId = taskId;
-        const res = await fetch(`/api/tasks/${taskId}`, { headers: { "x-codebot-token": token } });
-        const taskBody = await res.json();
-        const task = taskBody.data;
-        document.getElementById("taskDetail").textContent = JSON.stringify(task, null, 2);
-        if (task.resultJsonPath) {
-          const reportRes = await fetch(`/api/reports/${taskId}`, { headers: { "x-codebot-token": token } });
-          if (reportRes.ok) {
-            const reportBody = await reportRes.json();
-            const report = reportBody.data;
-            document.getElementById("reportDetail").textContent = JSON.stringify(report, null, 2);
-            document.getElementById("reportStats").textContent = JSON.stringify(buildReportStats(report), null, 2);
-          } else {
-            document.getElementById("reportDetail").textContent = "Report not available.";
-            document.getElementById("reportStats").textContent = "No report stats yet.";
+        try {
+          const res = await fetch(`/api/tasks/${taskId}`, { headers: { "x-codebot-token": token } });
+          const taskBody = await res.json();
+          if (!res.ok) {
+            document.getElementById("taskDetail").textContent = formatErr("读取任务失败", res, taskBody);
+            return;
           }
-        } else {
-          document.getElementById("reportDetail").textContent = "No report for this task yet.";
-          document.getElementById("reportStats").textContent = "No report stats yet.";
+          const task = taskBody.data;
+          document.getElementById("taskDetail").textContent = safeText(task);
+          if (task.resultJsonPath) {
+            const reportRes = await fetch(`/api/reports/${taskId}`, { headers: { "x-codebot-token": token } });
+            if (reportRes.ok) {
+              const reportBody = await reportRes.json();
+              const report = reportBody.data;
+              document.getElementById("reportDetail").textContent = safeText(report);
+              document.getElementById("reportStats").textContent = safeText(buildReportStats(report));
+            } else {
+              const reportErr = await reportRes.json();
+              document.getElementById("reportDetail").textContent = formatErr("报告暂不可用", reportRes, reportErr);
+              document.getElementById("reportStats").textContent = "暂无报告统计。";
+            }
+          } else {
+            document.getElementById("reportDetail").textContent = "该任务暂无报告。";
+            document.getElementById("reportStats").textContent = "暂无报告统计。";
+          }
+        } catch (error) {
+          document.getElementById("taskDetail").textContent = `读取任务异常: ${String(error)}`;
         }
       }
+
       async function refreshStats() {
-        const [statsRes, trendsRes] = await Promise.all([
-          fetch("/api/stats", { headers: { "x-codebot-token": token } }),
-          fetch("/api/reports/history", { headers: { "x-codebot-token": token } })
-        ]);
-        if (statsRes.ok) {
-          const stats = (await statsRes.json()).data;
-          document.getElementById("systemStats").textContent = JSON.stringify(stats, null, 2);
-        }
-        if (trendsRes.ok) {
-          const trends = (await trendsRes.json()).data;
-          const sorted = trends
-            .slice()
-            .sort((a, b) => String(a.sessionId).localeCompare(String(b.sessionId)))
-            .slice(-10);
-          document.getElementById("reportTrends").textContent = JSON.stringify(sorted, null, 2);
-          drawTrendChart(sorted);
+        try {
+          const [statsRes, trendsRes] = await Promise.all([
+            fetch("/api/stats", { headers: { "x-codebot-token": token } }),
+            fetch("/api/reports/history", { headers: { "x-codebot-token": token } })
+          ]);
+          if (statsRes.ok) {
+            const stats = (await statsRes.json()).data;
+            document.getElementById("systemStats").textContent = safeText(stats);
+            const summaryTotal = Number(stats?.total ?? stats?.totalTasks ?? stats?.tasksTotal ?? 0);
+            const running = Number(stats?.running ?? stats?.byStatus?.running ?? 0);
+            const failed = Number(stats?.failed ?? stats?.byStatus?.failed ?? 0);
+            document.getElementById("summaryTotal").textContent = String(summaryTotal);
+            document.getElementById("summaryRunning").textContent = String(running);
+            document.getElementById("summaryFailed").textContent = String(failed);
+          }
+          if (trendsRes.ok) {
+            const trends = (await trendsRes.json()).data;
+            const sorted = trends
+              .slice()
+              .sort((a, b) => String(a.sessionId).localeCompare(String(b.sessionId)))
+              .slice(-10);
+            document.getElementById("reportTrends").textContent = safeText(sorted);
+            drawTrendChart(sorted);
+          }
+        } catch (error) {
+          document.getElementById("systemStats").textContent = `读取统计异常: ${String(error)}`;
         }
       }
+
       function drawTrendChart(rows) {
         const canvas = document.getElementById("trendChart");
         const ctx = canvas.getContext("2d");
@@ -206,71 +948,161 @@
         const h = canvas.height - padding * 2;
         const values = rows.map((r) => Number(r.findingCount || 0));
         const max = Math.max(1, ...values);
-        const barW = Math.max(12, Math.floor(w / Math.max(1, rows.length)) - 8);
-        ctx.strokeStyle = "#999";
-        ctx.beginPath();
-        ctx.moveTo(padding, padding);
-        ctx.lineTo(padding, padding + h);
-        ctx.lineTo(padding + w, padding + h);
-        ctx.stroke();
-        rows.forEach((r, i) => {
+        const axis = getComputedStyle(document.body).getPropertyValue("--line").trim() || "#8094bf";
+        const lineColor = getComputedStyle(document.body).getPropertyValue("--primary").trim() || "#2d6df6";
+        const textColor = getComputedStyle(document.body).getPropertyValue("--sub").trim() || "#60708f";
+        ctx.strokeStyle = axis;
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 4; i += 1) {
+          const y = padding + (h / 4) * i;
+          ctx.beginPath();
+          ctx.moveTo(padding, y);
+          ctx.lineTo(padding + w, y);
+          ctx.stroke();
+        }
+        if (!rows.length) return;
+        const step = rows.length > 1 ? w / (rows.length - 1) : w / 2;
+        const points = rows.map((r, i) => {
           const v = Number(r.findingCount || 0);
-          const bh = Math.floor((v / max) * (h - 20));
-          const x = padding + i * (barW + 8) + 8;
-          const y = padding + h - bh;
-          ctx.fillStyle = "#4e79a7";
-          ctx.fillRect(x, y, barW, bh);
-          ctx.fillStyle = "#333";
-          ctx.font = "11px Arial";
-          ctx.fillText(String(v), x, y - 4);
+          const x = padding + i * step;
+          const y = padding + h - (v / max) * (h - 8);
+          return { x, y, v, sessionId: String(r.sessionId || `session-${i + 1}`) };
+        });
+        lastTrendPoints = points;
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i += 1) {
+          ctx.lineTo(points[i].x, points[i].y);
+        }
+        ctx.strokeStyle = lineColor;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        points.forEach((p) => {
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, 3.5, 0, Math.PI * 2);
+          ctx.fillStyle = lineColor;
+          ctx.fill();
+          ctx.fillStyle = textColor;
+          ctx.font = "11px sans-serif";
+          ctx.fillText(String(p.v), p.x - 5, p.y - 10);
         });
       }
+      function bindChartTooltip() {
+        const canvas = document.getElementById("trendChart");
+        const tip = document.getElementById("chartTooltip");
+        canvas.addEventListener("mousemove", (e) => {
+          if (!lastTrendPoints.length) return;
+          const rect = canvas.getBoundingClientRect();
+          const x = e.clientX - rect.left;
+          let nearest = lastTrendPoints[0];
+          let minDist = Math.abs(nearest.x - x);
+          for (let i = 1; i < lastTrendPoints.length; i += 1) {
+            const d = Math.abs(lastTrendPoints[i].x - x);
+            if (d < minDist) {
+              minDist = d;
+              nearest = lastTrendPoints[i];
+            }
+          }
+          tip.style.display = "block";
+          tip.style.left = `${nearest.x}px`;
+          tip.style.top = `${nearest.y}px`;
+          tip.textContent = `${nearest.sessionId} · 发现数 ${nearest.v}`;
+        });
+        canvas.addEventListener("mouseleave", () => {
+          tip.style.display = "none";
+        });
+      }
+
       async function refresh() {
-        const res = await fetch(`/api/tasks?${buildTaskQuery()}`, { headers: { "x-codebot-token": token } });
-        const payload = await res.json();
-        const data = payload.data || {};
-        const tasks = data.items || [];
-        lastTotal = Number(data.total ?? tasks.length);
-        const page = Math.floor(offset / limit) + 1;
-        const pageCount = Math.max(1, Math.ceil(lastTotal / limit));
-        document.getElementById("listMeta").textContent = `Total: ${lastTotal}, Showing: ${tasks.length}`;
-        document.getElementById("pageMeta").textContent = `Page ${page}/${pageCount}`;
-        const tbody = document.getElementById("tasks");
-        tbody.innerHTML = "";
-        for (const t of tasks) {
-          const tr = document.createElement("tr");
-          tr.innerHTML = `<td>${t.id}</td><td>${t.status}</td><td>${t.mode}</td><td>${t.target}</td><td>${new Date(t.updatedAt).toLocaleString()}</td><td><button data-id="${t.id}">View</button></td>`;
-          tbody.appendChild(tr);
-        }
-        tbody.querySelectorAll("button[data-id]").forEach((btn) => {
-          btn.addEventListener("click", async () => {
-            await showTask(btn.getAttribute("data-id"));
+        try {
+          toggleSkeleton(true);
+          const res = await fetch(`/api/tasks?${buildTaskQuery()}`, { headers: { "x-codebot-token": token } });
+          const payload = await res.json();
+          if (!res.ok) {
+            document.getElementById("taskDetail").textContent = formatErr("读取任务列表失败", res, payload);
+            toggleSkeleton(false);
+            return;
+          }
+          const data = payload.data || {};
+          const rawTasks = data.items || [];
+          const tasks = rawTasks.filter((t) => {
+            if (!globalSearch) return true;
+            const blob = `${t.id} ${t.target} ${t.status} ${t.mode}`.toLowerCase();
+            return blob.includes(globalSearch.toLowerCase());
           });
-        });
-        if (selectedTaskId) {
-          const hit = tasks.find((t) => t.id === selectedTaskId);
-          if (hit) await showTask(selectedTaskId);
+          lastTotal = Number(data.total ?? rawTasks.length);
+          const page = Math.floor(offset / limit) + 1;
+          const pageCount = Math.max(1, Math.ceil(lastTotal / limit));
+          document.getElementById("listMeta").innerHTML = `当前角色：<span class="chip">${currentRole}</span> | 总任务: ${lastTotal}，筛选后: ${tasks.length}`;
+          document.getElementById("pageMeta").textContent = `第 ${page} / ${pageCount} 页`;
+          const tbody = document.getElementById("tasks");
+          tbody.innerHTML = "";
+          toggleTasksEmpty(tasks.length === 0);
+          for (const t of tasks) {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+              <td class="cell-id" title="${t.id}">${t.id.slice(0, 12)}...</td>
+              <td><span class="badge ${statusClass(t.status)}">${t.status}</span></td>
+              <td><span class="chip">${t.mode}</span></td>
+              <td class="cell-target" title="${t.target}">${t.target}</td>
+              <td>${new Date(t.updatedAt).toLocaleString()}</td>
+              <td><button data-id="${t.id}">查看</button></td>`;
+            tbody.appendChild(tr);
+          }
+          tbody.querySelectorAll("button[data-id]").forEach((btn) => {
+            btn.addEventListener("click", async () => {
+              tbody.querySelectorAll("tr").forEach((row) => row.classList.remove("row-active"));
+              btn.closest("tr")?.classList.add("row-active");
+              await showTask(btn.getAttribute("data-id"));
+            });
+          });
+          if (selectedTaskId) {
+            const hit = tasks.find((t) => t.id === selectedTaskId);
+            if (hit) await showTask(selectedTaskId);
+          }
+          await refreshStats();
+          toggleSkeleton(false);
+        } catch (error) {
+          document.getElementById("taskDetail").textContent = `刷新异常: ${String(error)}`;
+          toggleSkeleton(false);
         }
-        await refreshStats();
       }
+
       document.getElementById("scanForm").addEventListener("submit", async (e) => {
         e.preventDefault();
         const target = document.getElementById("target").value;
-        await fetch("/api/tasks", {
-          method: "POST",
-          headers: { "content-type": "application/json", "x-codebot-token": token },
-          body: JSON.stringify({ target, mode: "scan" })
-        });
-        await refresh();
+        try {
+          const res = await fetch("/api/tasks", {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-codebot-token": token },
+            body: JSON.stringify({ target, mode: "scan" })
+          });
+          if (!res.ok) {
+            const body = await res.json();
+            document.getElementById("taskDetail").textContent = formatErr("创建任务失败", res, body);
+            return;
+          }
+          document.getElementById("target").value = "";
+          await refresh();
+          showToast("扫描任务创建成功");
+        } catch (error) {
+          document.getElementById("taskDetail").textContent = `创建任务异常: ${String(error)}`;
+          showToast("创建任务失败", "error");
+        }
       });
       document.getElementById("refreshBtn").addEventListener("click", refresh);
       document.getElementById("saveToken").addEventListener("click", () => {
         token = document.getElementById("tokenInput").value.trim();
         localStorage.setItem("codebot-token", token);
+        document.getElementById("listMeta").textContent = "Token 已保存，正在刷新身份...";
+        refreshMe();
+        refresh();
+        showToast("Token 已保存");
       });
       document.getElementById("listTokensBtn").addEventListener("click", listTokens);
       document.getElementById("rotateTokenBtn").addEventListener("click", rotateToken);
       document.getElementById("auditQueryBtn").addEventListener("click", queryAudit);
+      document.getElementById("uploadScanBtn").addEventListener("click", uploadAndScan);
       document.getElementById("prevPage").addEventListener("click", async () => {
         offset = Math.max(0, offset - limit);
         await refresh();
@@ -281,9 +1113,60 @@
       });
       document.getElementById("statusFilter").addEventListener("change", refresh);
       document.getElementById("modeFilter").addEventListener("change", refresh);
+      document.getElementById("globalSearch").addEventListener("input", async (e) => {
+        globalSearch = e.target.value.trim();
+        await refresh();
+      });
+      document.getElementById("themeLight").addEventListener("click", () => setTheme("light"));
+      document.getElementById("themeDark").addEventListener("click", () => setTheme("dark"));
+      function setDashboardView(view) {
+        dashboardView = view;
+        localStorage.setItem("codebot-dashboard-view", view);
+        document.body.classList.toggle("compact", view === "compact");
+        document.getElementById("viewCozy").classList.toggle("active", view === "cozy");
+        document.getElementById("viewCompact").classList.toggle("active", view === "compact");
+      }
+      document.getElementById("viewCozy").addEventListener("click", () => setDashboardView("cozy"));
+      document.getElementById("viewCompact").addEventListener("click", () => setDashboardView("compact"));
+      const sideItems = Array.from(document.querySelectorAll("[data-nav-target]"));
+      sideItems.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const id = btn.getAttribute("data-nav-target");
+          const node = document.getElementById(id);
+          if (node) node.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      });
+      window.addEventListener("scroll", () => {
+        let activeId = "overviewSection";
+        const marks = ["overviewSection", "tasksSection", "trendSection", "adminSection", "uploadHistorySection"];
+        for (const id of marks) {
+          const node = document.getElementById(id);
+          if (!node) continue;
+          const top = node.getBoundingClientRect().top;
+          if (top <= 120) activeId = id;
+        }
+        sideItems.forEach((btn) => {
+          btn.classList.toggle("active", btn.getAttribute("data-nav-target") === activeId);
+        });
+      });
+      document.querySelectorAll("[data-toggle-card]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const card = btn.closest(".collapsible");
+          const collapsed = card.classList.toggle("collapsed");
+          btn.textContent = collapsed ? "展开" : "折叠";
+        });
+      });
+      setTheme(theme);
+      setDashboardView(dashboardView);
+      bindChartTooltip();
       refresh();
       refreshMe();
-      setInterval(refresh, 3000);
+      refreshUploadHistory();
+      document.getElementById("welcomeBar").textContent = "欢迎使用 Codebot 中文控制台。可通过右上角切换主题，并在各模块中折叠/展开面板。";
+      setInterval(() => {
+        refresh();
+        refreshUploadHistory();
+      }, 3000);
     </script>
   </body>
-  </html>
+</html>

@@ -44,6 +44,42 @@ function fail(res: any, status: number, code: string, message: string): void {
   res.status(status).json({ ok: false, data: null, error: { code, message } });
 }
 
+function sanitizeUploadFileName(name: string): string {
+  return name.replace(/[^a-zA-Z0-9._-]/g, "_");
+}
+
+interface UploadHistoryItem {
+  id: string;
+  filename: string;
+  size: number;
+  createdAt: number;
+  taskId: string;
+  targetPath: string;
+  actorRole: string;
+}
+
+function uploadHistoryPath(dataDir: string): string {
+  return path.join(dataDir, "uploads.history.jsonl");
+}
+
+function appendUploadHistory(dataDir: string, item: UploadHistoryItem): void {
+  fs.mkdirSync(dataDir, { recursive: true });
+  fs.appendFileSync(uploadHistoryPath(dataDir), `${JSON.stringify(item)}\n`, "utf8");
+}
+
+function queryUploadHistory(dataDir: string, limit: number, offset: number): { items: UploadHistoryItem[]; total: number } {
+  const file = uploadHistoryPath(dataDir);
+  if (!fs.existsSync(file)) return { items: [], total: 0 };
+  const rows = fs
+    .readFileSync(file, "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as UploadHistoryItem)
+    .reverse();
+  const total = rows.length;
+  return { items: rows.slice(offset, offset + limit), total };
+}
+
 export async function createApp(config = loadConfig("config.yaml")): Promise<Express> {
   const logger = new Logger(config.logLevel);
   const auth = new AuthManager(config.dataDir, config.apiTokens);
@@ -102,6 +138,8 @@ export async function createApp(config = loadConfig("config.yaml")): Promise<Exp
         "/api/tasks": { get: { summary: "List tasks" }, post: { summary: "Create task (admin/operator)" } },
         "/api/tasks/{id}": { get: { summary: "Get task detail" } },
         "/api/stats": { get: { summary: "Get task/report stats" } },
+        "/api/uploads": { post: { summary: "Upload .py/.pdf/.txt/.doc/.docx and create scan task (admin/operator)" } },
+        "/api/uploads/history": { get: { summary: "List upload history (admin/operator/viewer)" } },
         "/api/reports/{taskId}": { get: { summary: "Get report by task" } },
         "/api/reports/history": { get: { summary: "Get report trend history" } },
         "/api/auth/tokens": { get: { summary: "List masked tokens (admin)" } },
@@ -120,6 +158,50 @@ export async function createApp(config = loadConfig("config.yaml")): Promise<Exp
     const task = await queue.enqueue(target, mode);
     audit.append({ ts: Date.now(), actorRole: role, action: "create_task", resource: "/api/tasks", status: "ok" });
     ok(res, task);
+  });
+
+  app.post("/api/uploads", async (req, res) => {
+    const role = (req as any).actorRole as string;
+    if (!["admin", "operator"].includes(role)) return fail(res, 403, "AUTH_FORBIDDEN", "forbidden");
+    const filename = String(req.body?.filename ?? "").trim();
+    const contentBase64 = String(req.body?.contentBase64 ?? "").trim();
+    if (!filename || !contentBase64) {
+      return fail(res, 400, "VALIDATION_UPLOAD_REQUIRED", "filename and contentBase64 are required");
+    }
+    const ext = path.extname(filename).toLowerCase();
+    if (![".py", ".pdf", ".txt", ".doc", ".docx"].includes(ext)) {
+      return fail(res, 400, "VALIDATION_UPLOAD_TYPE", "only .py, .pdf, .txt, .doc, .docx are supported");
+    }
+    const binary = Buffer.from(contentBase64, "base64");
+    if (binary.length === 0) {
+      return fail(res, 400, "VALIDATION_UPLOAD_EMPTY", "upload content is empty");
+    }
+    if (binary.length > 10 * 1024 * 1024) {
+      return fail(res, 400, "VALIDATION_UPLOAD_TOO_LARGE", "upload file must be <= 10MB");
+    }
+    const uploadDir = path.join(config.dataDir, "uploads");
+    fs.mkdirSync(uploadDir, { recursive: true });
+    const safeName = sanitizeUploadFileName(path.basename(filename));
+    const targetPath = path.join(uploadDir, `${Date.now()}-${safeName}`);
+    fs.writeFileSync(targetPath, binary);
+    const task = await queue.enqueue(targetPath, "scan");
+    appendUploadHistory(config.dataDir, {
+      id: `up-${Math.random().toString(36).slice(2, 10)}`,
+      filename: safeName,
+      size: binary.length,
+      createdAt: Date.now(),
+      taskId: task.id,
+      targetPath,
+      actorRole: role
+    });
+    audit.append({ ts: Date.now(), actorRole: role, action: "upload_scan_file", resource: "/api/uploads", status: "ok" });
+    ok(res, { task, targetPath });
+  });
+
+  app.get("/api/uploads/history", (req, res) => {
+    const limit = Math.max(1, Math.min(200, Number(req.query.limit ?? 20)));
+    const offset = Math.max(0, Number(req.query.offset ?? 0));
+    ok(res, queryUploadHistory(config.dataDir, limit, offset));
   });
 
   app.get("/api/tasks", async (req, res) => {

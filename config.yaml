@@ -10,7 +10,7 @@ app:
   git_commit_template: "chore(codebot): apply quality suggestions from automated scan"
 
 analysis:
-  include_extensions: [".ts", ".tsx", ".js", ".py"]
+  include_extensions: [".ts", ".tsx", ".js", ".py", ".pdf", ".txt", ".doc", ".docx"]
   max_files: 500
   max_file_size_kb: 256
 

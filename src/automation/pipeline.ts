@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { simpleGit } from "simple-git";
+import { PDFParse } from "pdf-parse";
 import { Finding, SessionRecord } from "../utils/types";
 import { RuleDefinition } from "../utils/types";
 import { runRuleRegistry } from "../rules/registry";
@@ -33,7 +34,7 @@ export async function prepareTarget(target: string, workspace: string): Promise<
   if (!fs.existsSync(resolved)) {
     throw new Error(`target does not exist: ${target}`);
   }
-  return fs.statSync(resolved).isDirectory() ? resolved : path.dirname(resolved);
+  return resolved;
 }
 
 function walkFiles(root: string, exts: string[], out: string[]): void {
@@ -49,21 +50,60 @@ function walkFiles(root: string, exts: string[], out: string[]): void {
   }
 }
 
-export function scanCodeQuality(
+async function extractFileText(abs: string, ext: string): Promise<string> {
+  if (ext === ".pdf") {
+    const parser = new PDFParse({ data: fs.readFileSync(abs) });
+    try {
+      const parsed = await parser.getText();
+      return (parsed.text ?? "").trim();
+    } finally {
+      await parser.destroy();
+    }
+  }
+  if (ext === ".docx") {
+    const mammoth = require("mammoth") as { extractRawText(input: { path: string }): Promise<{ value: string }> };
+    const result = await mammoth.extractRawText({ path: abs });
+    return (result.value ?? "").trim();
+  }
+  if (ext === ".doc") {
+    const WordExtractor = require("word-extractor") as new () => {
+      extract(file: string): Promise<{ getBody(): string }>;
+    };
+    const extractor = new WordExtractor();
+    const doc = await extractor.extract(abs);
+    return String(doc.getBody() ?? "").trim();
+  }
+  return fs.readFileSync(abs, "utf8");
+}
+
+export async function scanCodeQuality(
   repoDir: string,
   includeExtensions: string[],
   maxFiles: number,
   maxFileSizeKb: number,
   rules: RuleDefinition[]
-): Finding[] {
+): Promise<Finding[]> {
   const files: string[] = [];
-  walkFiles(repoDir, includeExtensions, files);
+  const rootStat = fs.statSync(repoDir);
+  if (rootStat.isDirectory()) {
+    walkFiles(repoDir, includeExtensions, files);
+  } else if (includeExtensions.includes(path.extname(repoDir))) {
+    files.push(repoDir);
+  }
   const findings: Finding[] = [];
+  const baseDir = rootStat.isDirectory() ? repoDir : path.dirname(repoDir);
   for (const abs of files.slice(0, maxFiles)) {
     const stat = fs.statSync(abs);
     if (stat.size > maxFileSizeKb * 1024) continue;
-    const text = fs.readFileSync(abs, "utf8");
-    const rel = path.relative(repoDir, abs);
+    const rel = path.relative(baseDir, abs);
+    const ext = path.extname(abs).toLowerCase();
+    let text = "";
+    try {
+      text = await extractFileText(abs, ext);
+    } catch {
+      text = "";
+    }
+    if (!text) continue;
     findings.push(...runRuleRegistry(rel, text, rules));
   }
   return findings;

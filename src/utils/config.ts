@@ -66,7 +66,7 @@ export function loadConfig(configPath: string): AppConfig {
     reportDir: path.resolve(app.report_dir ?? "./reports"),
     dataDir: path.resolve(app.data_dir ?? "./data"),
     logLevel: app.log_level ?? "info",
-    includeExtensions: analysis.include_extensions ?? [".ts", ".tsx", ".js", ".py"],
+    includeExtensions: analysis.include_extensions ?? [".ts", ".tsx", ".js", ".py", ".pdf", ".txt", ".doc", ".docx"],
     maxFiles,
     maxFileSizeKb: maxSize,
     rules,

@@ -32,7 +32,7 @@ export class CodeQualityBotEngine {
     const repoPath = await prepareTarget(target, this.config.workspace);
     this.sessionManager.addEvent(session.sessionId, "prepare_target", { resolvedPath: repoPath });
 
-    const findings = scanCodeQuality(
+    const findings = await scanCodeQuality(
       repoPath,
       this.config.includeExtensions,
       this.config.maxFiles,
