@@ -17,38 +17,6 @@
 
 > Codebot 专注代码质量与工程治理，不包含未授权攻击、漏洞利用或渗透测试能力。
 
-## 一屏快速了解
-
-### 你能马上做什么
-
-- `5 分钟启动`：安装依赖 -> 启动 API -> 打开 Web 控制台
-- `3 种使用入口`：CLI、REST API、Web 控制台
-- `AI 多模型`：Ollama / OpenAI 兼容 / Anthropic / Gemini / DeepSeek 等
-- `可运营闭环`：扫描 -> 风险评估 -> 修复建议 -> 复扫对比 -> 发布判断
-
-### 面向招聘展示的亮点
-
-- 全栈工程化：队列、持久化、RBAC、审计、OpenAPI、测试、CI
-- Agent 化执行链：Planner / Strategist / Executor / Reviewer / Self-healing
-- 产品化体验：中文控制台、趋势分析、阻断原因定位、筛选持久化
-
-### 快速启动卡片
-
-```bash
-# 1) 安装与构建
-npm install
-npm run build
-
-# 2) 启动服务
-npm run start:api
-
-# 3) 本地扫描（示例）
-npm run start -- scan --target ./src --mode local
-```
-
-- Web Console: `http://localhost:8711/`
-- Health: `http://localhost:8711/health`
-
 ## 目录
 
 - [产品定位](#产品定位)
