@@ -1,3 +1,5 @@
+import { getProviderMeta } from "./provider-registry";
+
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
   content: string;
@@ -9,30 +11,16 @@ export interface LLMProvider {
 
 function resolveApiKey(provider: string, explicitApiKey?: string): string {
   if (explicitApiKey?.trim()) return explicitApiKey.trim();
-  return (
-    process.env.CODEBOT_LLM_API_KEY ??
-    process.env.OPENAI_API_KEY ??
-    process.env.ANTHROPIC_API_KEY ??
-    process.env.GEMINI_API_KEY ??
-    ""
-  ).trim();
+  const meta = getProviderMeta(provider);
+  const providerKey = meta?.apiKeyEnv ? process.env[meta.apiKeyEnv] : "";
+  return (providerKey ?? process.env.CODEBOT_LLM_API_KEY ?? process.env.OPENAI_API_KEY ?? "").trim();
 }
 
 function providerDefaultBaseUrl(provider: string, fallback: string): string {
   const p = provider.toLowerCase();
-  const defaults: Record<string, string> = {
-    openai: "https://api.openai.com/v1",
-    openai_compat: "https://api.openai.com/v1",
-    deepseek: "https://api.deepseek.com/v1",
-    qwen: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    groq: "https://api.groq.com/openai/v1",
-    moonshot: "https://api.moonshot.cn/v1",
-    zhipu: "https://open.bigmodel.cn/api/paas/v4",
-    siliconflow: "https://api.siliconflow.cn/v1",
-    anthropic: "https://api.anthropic.com/v1",
-    gemini: "https://generativelanguage.googleapis.com/v1beta"
-  };
-  return fallback?.trim() || defaults[p] || "https://api.openai.com/v1";
+  const meta = getProviderMeta(p);
+  const envBase = meta?.baseUrlEnv ? process.env[meta.baseUrlEnv] : "";
+  return fallback?.trim() || envBase?.trim() || meta?.defaultBaseUrl || "https://api.openai.com/v1";
 }
 
 class MockProvider implements LLMProvider {
@@ -139,10 +127,34 @@ class GeminiProvider implements LLMProvider {
   }
 }
 
+class OllamaProvider implements LLMProvider {
+  constructor(private readonly baseUrl: string, private readonly model: string) {}
+
+  async chat(messages: ChatMessage[]): Promise<string> {
+    const res = await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: this.model,
+        stream: false,
+        messages
+      })
+    });
+    if (!res.ok) {
+      throw new Error(`Ollama request failed: HTTP ${res.status} ${await res.text()}`);
+    }
+    const data = (await res.json()) as { message?: { content?: string } };
+    return data.message?.content ?? "";
+  }
+}
+
 export function createLLM(provider: string, model: string, baseUrl: string, apiKey?: string): LLMProvider {
   const resolvedProvider = provider.toLowerCase();
   const resolvedBaseUrl = providerDefaultBaseUrl(resolvedProvider, baseUrl);
   const resolvedApiKey = resolveApiKey(resolvedProvider, apiKey);
+  if (resolvedProvider === "ollama") {
+    return new OllamaProvider(resolvedBaseUrl, model);
+  }
   if (resolvedProvider === "anthropic") {
     return new AnthropicProvider(resolvedBaseUrl, model, resolvedApiKey);
   }

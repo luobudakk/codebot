@@ -106,7 +106,8 @@ npm run start -- scan --target ./src --mode local
 
 ## Configuration
 
-Priority order: **environment variables > `config.yaml`**.
+Priority order: **environment variables > `config.yaml`**.  
+Runtime LLM config is persisted in `data/llm.runtime.json` and restored by provider profile.
 
 | Variable | Purpose | Default |
 |----------|---------|---------|
@@ -119,6 +120,7 @@ Priority order: **environment variables > `config.yaml`**.
 | `CODEBOT_LLM_PROVIDER` | LLM provider | `mock` |
 | `CODEBOT_LLM_MODEL` | model name | `gpt-4o-mini` |
 | `OPENAI_API_KEY` | OpenAI-compatible key | empty |
+| `OLLAMA_HOST` | Ollama host (when provider=ollama) | `http://127.0.0.1:11434` |
 
 ## CLI Usage
 
@@ -129,12 +131,19 @@ npm run start -- scan --target <path-or-git-url> --mode local
 # submit tasks via API mode
 npm run start -- scan --target <path-or-git-url> --mode api
 npm run start -- task --mode api
+npm run start -- watch --mode api
 
 # generate and apply fixes (optional)
 npm run start -- fix --target <path-or-git-url> --mode local --apply
 
 # print effective config
 npm run start -- config
+
+# list supported providers
+npm run start -- providers
+
+# interactive terminal console (help/providers/tasks/watch/quit)
+npm run start -- console
 ```
 
 ## API Usage
@@ -158,6 +167,8 @@ Key endpoints:
 | `GET` | `/api/tasks/:id` | task detail |
 | `GET` | `/api/stats` | aggregated stats |
 | `GET` | `/api/reports/history` | trend history |
+| `GET` | `/api/llm/providers` | LLM provider registry |
+| `GET` | `/api/tools/catalog` | executor tool catalog |
 | `GET` | `/api/auth/tokens` | token list (admin) |
 | `POST` | `/api/auth/rotate` | rotate token (admin) |
 | `GET` | `/api/audit/recent` | audit query (admin) |
@@ -191,9 +202,14 @@ Rules are managed by a registry model. Built-in rules can be merged with custom 
 Current providers:
 
 - `mock` (default)
-- `openai_compat`
+- `ollama`
+- `openai / openai_compat`
+- `deepseek / qwen / groq / moonshot / zhipu / siliconflow`
+- `anthropic / gemini`
 
-You can add custom providers in `src/ai/providers.ts`.
+Also:
+- provider metadata is unified in `src/ai/provider-registry.ts`
+- Web can load provider options from `/api/llm/providers`
 
 ## Git Auto-fix Strategy
 

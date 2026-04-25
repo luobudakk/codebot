@@ -571,7 +571,8 @@
             </div>
             <div class="section-sub" style="margin-top: 10px">运行时大模型配置（无需重启可切换）</div>
             <div class="form-row">
-              <input id="llmProviderInput" style="min-width: 140px" placeholder="provider: deepseek/openai_compat/anthropic/gemini" />
+              <input id="llmProviderInput" list="llmProviders" style="min-width: 140px" placeholder="provider: deepseek/openai_compat/anthropic/gemini/ollama" />
+              <datalist id="llmProviders"></datalist>
               <input id="llmModelInput" style="min-width: 180px" placeholder="model: gpt-4o-mini / deepseek-chat / claude..." />
               <input id="llmBaseUrlInput" style="min-width: 220px; flex:1" placeholder="base url (可选)" />
             </div>
@@ -1044,6 +1045,21 @@
 
       async function refreshMe() {
         try {
+          try {
+            const pRes = await fetch("/api/llm/providers", { headers: { "x-codebot-token": token } });
+            if (pRes.ok) {
+              const pBody = await pRes.json();
+              const providers = Array.isArray(pBody?.data) ? pBody.data : [];
+              const list = document.getElementById("llmProviders");
+              list.innerHTML = "";
+              providers.forEach((p) => {
+                const op = document.createElement("option");
+                op.value = String(p.id || "");
+                op.label = `${String(p.name || p.id)} (${String(p.group || "unknown")})`;
+                list.appendChild(op);
+              });
+            }
+          } catch (_ignore) {}
           const res = await fetch("/api/me", { headers: { "x-codebot-token": token } });
           if (!res.ok) {
             document.getElementById("listMeta").textContent = "角色读取失败，请检查 Token。";

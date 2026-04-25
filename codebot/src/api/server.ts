@@ -10,6 +10,9 @@ import { createTaskStore } from "./task-store";
 import { TaskListQuery } from "./task-store.types";
 import { AuthManager } from "./auth";
 import { AuditLogStore } from "./audit-log";
+import { readRuntimeLLMConfig, writeRuntimeLLMConfig } from "./llm-config-store";
+import { listProviders } from "../ai/provider-registry";
+import { getToolCatalog } from "../agents/toolchain";
 
 function parseTaskListQuery(query: Record<string, unknown>): TaskListQuery {
   const status = typeof query.status === "string" ? query.status : undefined;
@@ -88,6 +91,10 @@ export async function createApp(config = loadConfig("config.yaml")): Promise<Exp
   const store = createTaskStore(config);
   await store.init();
   const engine = new CodeQualityBotEngine(config);
+  const runtimeLlm = readRuntimeLLMConfig(config.dataDir);
+  if (runtimeLlm) {
+    engine.updateLLM(runtimeLlm);
+  }
   const queue = new TaskQueue(store, engine, 2);
 
   const app = express();
@@ -151,6 +158,8 @@ export async function createApp(config = loadConfig("config.yaml")): Promise<Exp
         "/api/reports/{taskId}": { get: { summary: "Get report by task" } },
         "/api/reports/history": { get: { summary: "Get report trend history" } },
         "/api/llm/config": { get: { summary: "Get runtime llm config" }, post: { summary: "Update runtime llm config (admin)" } },
+        "/api/llm/providers": { get: { summary: "List supported llm providers" } },
+        "/api/tools/catalog": { get: { summary: "List executor tool catalog" } },
         "/api/llm/test": { post: { summary: "Test runtime llm connectivity (admin/operator)" } },
         "/api/auth/tokens": { get: { summary: "List masked tokens (admin)" } },
         "/api/auth/rotate": { post: { summary: "Rotate token (admin)" } },
@@ -218,6 +227,12 @@ export async function createApp(config = loadConfig("config.yaml")): Promise<Exp
   app.get("/api/llm/config", (req, res) => {
     ok(res, engine.getLLMStatus());
   });
+  app.get("/api/llm/providers", (_req, res) => {
+    ok(res, listProviders());
+  });
+  app.get("/api/tools/catalog", (_req, res) => {
+    ok(res, getToolCatalog());
+  });
 
   app.post("/api/llm/config", (req, res) => {
     const role = (req as any).actorRole as string;
@@ -227,7 +242,9 @@ export async function createApp(config = loadConfig("config.yaml")): Promise<Exp
     const baseUrl = String(req.body?.baseUrl ?? "").trim();
     const apiKey = String(req.body?.apiKey ?? "").trim();
     if (!provider || !model) return fail(res, 400, "VALIDATION_LLM_REQUIRED", "provider and model are required");
-    engine.updateLLM({ provider, model, baseUrl, apiKey });
+    const next = { provider, model, baseUrl, apiKey };
+    engine.updateLLM(next);
+    writeRuntimeLLMConfig(config.dataDir, next);
     audit.append({ ts: Date.now(), actorRole: role, action: "update_llm_config", resource: "/api/llm/config", status: "ok" });
     ok(res, engine.getLLMStatus());
   });

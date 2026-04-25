@@ -139,7 +139,8 @@ npm run start -- scan --target ./src --mode local
 
 ## 配置说明
 
-配置优先级：**环境变量 > `config.yaml`**。
+配置优先级：**环境变量 > `config.yaml`**。  
+运行时 LLM 配置会持久化到 `data/llm.runtime.json`，并按 provider profile 自动恢复。
 
 常用环境变量：
 
@@ -153,7 +154,9 @@ npm run start -- scan --target ./src --mode local
 | `CODEBOT_GIT_COMMIT_TEMPLATE` | 自动修复提交模板 | 内置模板 |
 | `CODEBOT_LLM_PROVIDER` | LLM 提供方 | `mock` |
 | `CODEBOT_LLM_MODEL` | 模型名 | `gpt-4o-mini` |
+| `CODEBOT_LLM_BASE_URL` | 通用 LLM Base URL（可选） | 空 |
 | `OPENAI_API_KEY` | OpenAI 兼容 Key | 空 |
+| `OLLAMA_HOST` | Ollama 地址（provider=ollama 时可用） | `http://127.0.0.1:11434` |
 
 ## CLI 使用
 
@@ -168,6 +171,7 @@ npm run start -- scan --target <path-or-git-url> --mode local
 ```bash
 npm run start -- scan --target <path-or-git-url> --mode api
 npm run start -- task --mode api
+npm run start -- watch --mode api
 ```
 
 ### 生成并应用修复（谨慎）
@@ -182,6 +186,12 @@ npm run start -- fix --target <path-or-git-url> --mode local --apply
 
 ```bash
 npm run start -- config
+
+# 查看支持的 AI provider 列表
+npm run start -- providers
+
+# 终端交互控制台（help/providers/tasks/watch/quit）
+npm run start -- console
 ```
 
 ## API 使用
@@ -205,6 +215,8 @@ Content-Type: application/json
 | `GET` | `/api/tasks/:id` | 任务详情 |
 | `GET` | `/api/stats` | 聚合统计 |
 | `GET` | `/api/reports/history` | 历史趋势 |
+| `GET` | `/api/llm/providers` | LLM provider 注册表 |
+| `GET` | `/api/tools/catalog` | Executor 工具目录 |
 | `GET` | `/api/auth/tokens` | token 列表（admin） |
 | `POST` | `/api/auth/rotate` | token 轮换（admin） |
 | `GET` | `/api/audit/recent` | 审计查询（admin） |
@@ -243,10 +255,16 @@ Web 页面提供：
 
 当前支持：
 
-- `mock`（默认，无外部依赖，便于本地开发）
-- `openai_compat`（兼容 OpenAI 风格接口）
+- `mock`（默认，无外部依赖）
+- `ollama`（本地模型）
+- `openai / openai_compat`
+- `deepseek / qwen / groq / moonshot / zhipu / siliconflow`
+- `anthropic / gemini`
 
-可通过 `src/ai/providers.ts` 扩展自定义 provider。
+此外：
+- Provider 元信息由 `src/ai/provider-registry.ts` 统一维护
+- 前端可通过 `/api/llm/providers` 获取可选项
+- 运行时配置按 provider profile 持久化恢复
 
 ## Git 自动修复策略
 

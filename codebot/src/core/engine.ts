@@ -11,7 +11,7 @@ import { AppConfig } from "../utils/config";
 import { Logger } from "../utils/logger";
 import { AgentAnalysis, RunResult } from "../utils/types";
 import { mergeRules } from "../rules/registry";
-import { chooseTools, executeTools } from "../agents/toolchain";
+import { chooseTools, executeTools, planToolLayers, ToolLayer } from "../agents/toolchain";
 
 type ToolExecutionLike = { name: string; status: "ok" | "skipped" | "error"; summary: string; output: Record<string, unknown> };
 
@@ -110,7 +110,8 @@ function buildAgentAnalysis(
   plannerRaw: string,
   strategistRaw: string,
   reviewerRaw: string,
-  toolExecutions: Array<{ name: string; status: "ok" | "skipped" | "error"; summary: string; output: Record<string, unknown> }>
+  toolExecutions: Array<{ name: string; status: "ok" | "skipped" | "error"; summary: string; output: Record<string, unknown> }>,
+  toolLayers: ToolLayer[]
 ): AgentAnalysis {
   const p = extractJsonBlock(plannerRaw) ?? {};
   const s = extractJsonBlock(strategistRaw) ?? {};
@@ -152,6 +153,7 @@ function buildAgentAnalysis(
     },
     executor: {
       selectedTools: toolExecutions.map((x) => x.name),
+      layers: toolLayers,
       executedTools: toolExecutions
     },
     selfHealing,
@@ -182,11 +184,14 @@ export class CodeQualityBotEngine {
   }
 
   getLLMStatus(): { provider: string; model: string; baseUrl: string; hasApiKey: boolean } {
+    const providerNeedsKey = !["ollama", "mock"].includes(this.llmProvider.toLowerCase());
     return {
       provider: this.llmProvider,
       model: this.llmModel,
       baseUrl: this.llmBaseUrl,
-      hasApiKey: Boolean(this.llmApiKey || process.env.CODEBOT_LLM_API_KEY || process.env.OPENAI_API_KEY)
+      hasApiKey: providerNeedsKey
+        ? Boolean(this.llmApiKey || process.env.CODEBOT_LLM_API_KEY || process.env.OPENAI_API_KEY)
+        : true
     };
   }
 
@@ -276,9 +281,21 @@ export class CodeQualityBotEngine {
     ]);
     this.sessionManager.addEvent(session.sessionId, "agent_strategist", { provider: this.llmProvider, model: this.llmModel });
     const selectedTools = chooseTools(findings);
-    const toolExecutions = executeTools(selectedTools, findings);
+    const toolLayers = planToolLayers(selectedTools);
+    const toolExecutions: Array<{ name: string; status: "ok" | "skipped" | "error"; summary: string; output: Record<string, unknown> }> = [];
+    for (const layer of toolLayers) {
+      this.sessionManager.addEvent(session.sessionId, "agent_executor_layer_start", {
+        name: layer.name,
+        tools: layer.tools
+      });
+      toolExecutions.push(...executeTools(layer.tools, findings));
+      this.sessionManager.addEvent(session.sessionId, "agent_executor_layer_complete", {
+        name: layer.name
+      });
+    }
     this.sessionManager.addEvent(session.sessionId, "agent_executor", {
       selectedTools,
+      layers: toolLayers,
       executed: toolExecutions.map((x) => ({ name: x.name, status: x.status }))
     });
     const baselineGate = buildSelfHealingAssessment(findings, toolExecutions);
@@ -349,7 +366,8 @@ export class CodeQualityBotEngine {
       plannerRaw,
       strategistRaw,
       reviewerRaw,
-      toolExecutions
+      toolExecutions,
+      toolLayers
     );
 
     const reports = writeReports({

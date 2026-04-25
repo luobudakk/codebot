@@ -1,5 +1,7 @@
 import { loadConfig } from "./utils/config";
 import { CodeQualityBotEngine } from "./core/engine";
+import { listProviders } from "./ai/provider-registry";
+import { runTerminalConsole } from "./cli/terminal-console";
 
 function parseArg(flag: string): string | undefined {
   const idx = process.argv.indexOf(flag);
@@ -65,6 +67,36 @@ async function listTasks(configPath: string): Promise<void> {
   console.log(JSON.stringify(rows, null, 2));
 }
 
+async function watchTasks(configPath: string): Promise<void> {
+  const cfg = loadConfig(configPath);
+  for (;;) {
+    const resp = await fetch(`http://localhost:${cfg.apiPort}/api/tasks?limit=10&offset=0&sortBy=updatedAt&sortOrder=desc`, {
+      headers: { "x-codebot-token": cfg.apiToken }
+    });
+    if (!resp.ok) throw new Error(`API task watch failed: ${resp.status} ${await resp.text()}`);
+    const payload = await resp.json();
+    const rows = payload?.data?.items ?? [];
+    console.clear();
+    console.log(`[codebot watch] ${new Date().toLocaleString()}`);
+    console.log("id\t\t\t\tstatus\tmode\ttarget");
+    for (const row of rows) {
+      console.log(`${String(row.id).slice(0, 8)}\t${row.status}\t${row.mode}\t${String(row.target).slice(0, 60)}`);
+    }
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+}
+
+function showProviders(): void {
+  const rows = listProviders().map((x) => ({
+    id: x.id,
+    group: x.group,
+    needsApiKey: x.needsApiKey,
+    defaultModel: x.defaultModel,
+    defaultBaseUrl: x.defaultBaseUrl ?? "N/A"
+  }));
+  console.log(JSON.stringify(rows, null, 2));
+}
+
 async function main(): Promise<void> {
   const command = parseCommand();
   const target = parseArg("--target");
@@ -79,9 +111,21 @@ async function main(): Promise<void> {
     await listTasks(configPath);
     return;
   }
+  if (command === "watch") {
+    await watchTasks(configPath);
+    return;
+  }
+  if (command === "providers") {
+    showProviders();
+    return;
+  }
+  if (command === "console") {
+    await runTerminalConsole(configPath);
+    return;
+  }
   if (!target) {
     console.error(
-      "Usage: npm run dev -- <scan|fix|task|config> --target <path-or-git-url> [--mode local|api] [--config config.yaml]"
+      "Usage: npm run dev -- <scan|fix|task|watch|providers|console|config> --target <path-or-git-url> [--mode local|api] [--config config.yaml]"
     );
     process.exit(1);
   }

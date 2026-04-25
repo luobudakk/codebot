@@ -95,6 +95,7 @@ export interface AgentAnalysis {
   };
   executor: {
     selectedTools: string[];
+    layers?: Array<{ name: string; tools: string[] }>;
     executedTools: Array<{
       name: string;
       status: "ok" | "skipped" | "error";

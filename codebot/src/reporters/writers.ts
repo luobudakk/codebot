@@ -52,6 +52,9 @@ export function writeReports(params: {
       : ["- N/A"]),
     "",
     "### Executor",
+    ...(params.agentAnalysis?.executor.layers?.length
+      ? params.agentAnalysis.executor.layers.map((l) => `- Layer \`${l.name}\`: ${l.tools.join(", ")}`)
+      : ["- Layer plan: N/A"]),
     ...(params.agentAnalysis?.executor.executedTools?.length
       ? params.agentAnalysis.executor.executedTools.map(
           (t) => `- [${t.status}] \`${t.name}\` - ${t.summary}`
