@@ -40,6 +40,7 @@ export class FileTaskStore implements ITaskStore {
     let rows = this.readAll();
     if (q.status) rows = rows.filter((r) => r.status === q.status);
     if (q.mode) rows = rows.filter((r) => r.mode === q.mode);
+    if (Number.isFinite(q.createdAfter)) rows = rows.filter((r) => r.createdAt >= Number(q.createdAfter));
     const sortBy = q.sortBy ?? "createdAt";
     const sortOrder = q.sortOrder ?? "desc";
     rows = rows.sort((a, b) => {
@@ -56,10 +57,17 @@ export class FileTaskStore implements ITaskStore {
     let rows = this.readAll();
     if (q.status) rows = rows.filter((r) => r.status === q.status);
     if (q.mode) rows = rows.filter((r) => r.mode === q.mode);
+    if (Number.isFinite(q.createdAfter)) rows = rows.filter((r) => r.createdAt >= Number(q.createdAfter));
     return rows.length;
   }
 
   async getById(id: string): Promise<TaskRecord | undefined> {
     return this.readAll().find((t) => t.id === id);
+  }
+
+  async purgeAll(): Promise<number> {
+    const rows = this.readAll();
+    this.writeAll([]);
+    return rows.length;
   }
 }

@@ -113,11 +113,32 @@
         align-items: center;
         gap: 10px;
         margin-bottom: 12px;
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        background: var(--bg);
+        padding: 8px 0;
       }
       .global-search {
         min-width: 320px;
         flex: 1;
       }
+      .simple-only { display: block; }
+      .technical-only { display: none !important; }
+      body.show-technical .technical-only { display: block !important; }
+      body.show-technical tr.technical-only { display: table-row !important; }
+      body.show-technical .technical-only.toolbar,
+      body.show-technical .technical-only.form-row,
+      body.show-technical .technical-only.quick-actions,
+      body.show-technical .technical-only.chart-legend { display: flex !important; }
+      .advanced-only { display: none !important; }
+      body.advanced-mode .advanced-only { display: block !important; }
+      body.advanced-mode .advanced-only.toolbar-label,
+      body.advanced-mode .advanced-only.form-row,
+      body.advanced-mode .advanced-only.chart-legend,
+      body.advanced-mode .advanced-only.quick-actions { display: flex !important; }
+      body.advanced-mode .advanced-only.table-row { display: table-row !important; }
+      body.advanced-mode .advanced-only.inline-block { display: inline-block !important; }
       .hero {
         background: linear-gradient(120deg, #1f4ec8 0%, #3876ff 65%, #4f8fff 100%);
         color: #fff;
@@ -218,6 +239,20 @@
         margin-bottom: 10px;
         background: rgba(120, 144, 196, 0.08);
       }
+      .progress-track {
+        width: 100%;
+        height: 8px;
+        border-radius: 999px;
+        background: rgba(120, 144, 196, 0.25);
+        overflow: hidden;
+        margin-top: 8px;
+      }
+      .progress-fill {
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, var(--primary), #6ea0ff);
+        transition: width 0.25s ease;
+      }
       .result-title {
         font-weight: 700;
         margin-bottom: 4px;
@@ -242,6 +277,19 @@
         flex-wrap: wrap;
         gap: 10px;
         align-items: center;
+      }
+      .toolbar {
+        padding: 10px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: rgba(120, 144, 196, 0.06);
+      }
+      .toolbar-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--sub);
+        font-size: 13px;
       }
       input, select, button {
         border-radius: 8px;
@@ -478,7 +526,7 @@
         <button class="side-item active" type="button" data-nav-target="overviewSection">总览仪表盘</button>
         <button class="side-item" type="button" data-nav-target="tasksSection">任务中心</button>
         <button class="side-item" type="button" data-nav-target="trendSection">报告趋势</button>
-        <button class="side-item" type="button" data-nav-target="adminSection">审计与凭证</button>
+        <button class="side-item advanced-only" type="button" data-nav-target="adminSection">审计与凭证</button>
         <button class="side-item" type="button" data-nav-target="uploadHistorySection">上传历史</button>
       </aside>
       <main class="main">
@@ -489,6 +537,8 @@
           <button id="viewCozy" type="button">舒适布局</button>
           <button id="viewCompact" type="button">紧凑布局</button>
         </div>
+        <button id="toggleTechnicalBtn" type="button" class="ghost">展开技术详情</button>
+          <label class="toolbar-label"><input id="advancedModeToggle" type="checkbox" />高级模式</label>
       </div>
       <section class="hero">
         <div class="hero-top">
@@ -531,26 +581,26 @@
             <div class="summary-meta">需要优先关注的异常任务</div>
           </div>
         </div>
-        <div class="card span-4">
+        <div class="card span-4 advanced-only">
           <div class="summary-card">
             <div class="summary-label">发布风险评估-可发布</div>
             <div id="summaryHealPass" class="summary-value">-</div>
             <div class="summary-meta">风险评估结果为“可发布”的会话数</div>
           </div>
         </div>
-        <div class="card span-4">
+        <div class="card span-4 advanced-only">
           <div class="summary-card">
             <div class="summary-label">发布风险评估-需人工确认</div>
             <div id="summaryHealConditional" class="summary-value">-</div>
             <div class="summary-meta">风险评估结果为“需人工确认”的会话数</div>
           </div>
         </div>
-        <div class="card span-4">
+        <div class="card span-4 advanced-only">
           <div class="summary-card">
             <div class="summary-label">发布风险评估-阻断发布</div>
             <div id="summaryHealFail" class="summary-value">-</div>
             <div class="summary-meta">风险评估结果为“阻断发布”的会话数</div>
-            <div class="quick-actions">
+            <div class="quick-actions advanced-only">
               <button id="focusHealFailBtn" type="button">只看阻断发布</button>
               <button id="clearHealFocusBtn" type="button" class="ghost">退出快速模式</button>
             </div>
@@ -612,7 +662,7 @@
 
         <div id="tasksSection" class="card span-12">
           <h2>任务列表</h2>
-          <div class="section-sub">支持分页、筛选、状态标记与任务详情钻取</div>
+          <div class="section-sub">支持分页、筛选、状态标记与任务详情钻取（默认仅显示本次启动任务）</div>
           <div class="toolbar">
             <label>状态</label>
             <select id="statusFilter">
@@ -629,8 +679,8 @@
               <option value="scan">scan</option>
               <option value="fix">fix</option>
             </select>
-            <label>发布风险评估</label>
-            <select id="selfHealFilter">
+            <label class="advanced-only inline-block">发布风险评估</label>
+            <select id="selfHealFilter" class="advanced-only">
               <option value="">全部</option>
               <option value="pass">可发布</option>
               <option value="conditional_pass">需人工确认</option>
@@ -639,17 +689,18 @@
             </select>
             <button id="refreshBtn" type="button">手动刷新</button>
             <button id="resetFiltersBtn" type="button" class="ghost">重置全部筛选</button>
+            <label class="toolbar-label"><input id="currentSessionOnly" type="checkbox" checked />仅本次启动</label>
             <span id="pageMeta" class="muted">第 1 页</span>
           </div>
-          <div class="section-sub" style="margin-top:8px">阻断发布原因 TopN（批处理视图）</div>
-          <div class="toolbar" style="margin-bottom:8px">
+          <div class="section-sub advanced-only" style="margin-top:8px">阻断发布原因 TopN（批处理视图）</div>
+          <div class="toolbar advanced-only" style="margin-bottom:8px">
             <label>阻断原因过滤</label>
             <select id="failReasonFilter">
               <option value="">全部原因</option>
             </select>
             <button id="clearFailReasonFilterBtn" type="button" class="ghost">清空阻断原因过滤</button>
           </div>
-          <pre id="failReasonTop">暂无阻断发布统计。</pre>
+          <pre id="failReasonTop" class="advanced-only">暂无阻断发布统计。</pre>
 
           <div class="table-wrap" style="margin-top: 10px">
             <table>
@@ -687,35 +738,40 @@
           </div>
         </div>
 
-        <div class="card span-4">
+        <div class="card span-4 simple-only">
           <h2>任务详情</h2>
-          <div class="section-sub">展示任务状态、参数和执行结果路径</div>
+          <div class="section-sub">运行状态与结果摘要</div>
+          <div id="runtimeProgressCard" class="result-card">
+            <div class="result-title">实时审阅轨迹：待开始</div>
+            <div id="runtimeProgressText" class="muted">选择任务后显示当前阶段与进度</div>
+            <div class="progress-track"><div id="runtimeProgressFill" class="progress-fill"></div></div>
+          </div>
           <div id="resultSummary" class="result-card">
             <div class="result-title">结果总评：待分析</div>
             <div class="muted">请选择任务后显示质量结论</div>
           </div>
-          <pre id="taskDetail">请选择任务...</pre>
+          <pre id="taskDetail" class="technical-only">请选择任务...</pre>
         </div>
-        <div class="card span-4">
+        <div class="card span-4 simple-only">
           <h2>报告详情</h2>
-          <div class="section-sub">先看业务化摘要，再看原始 JSON（便于排查）</div>
+          <div class="section-sub">给业务用户的可执行建议</div>
           <pre id="reportSummary">请选择含报告的任务...</pre>
-          <pre id="reportDetail">请选择含报告的任务...</pre>
+          <pre id="reportDetail" class="advanced-only technical-only">请选择含报告的任务...</pre>
         </div>
-        <div class="card span-4">
-          <h2>报告统计</h2>
-          <div class="section-sub">按严重级别与规则聚合统计</div>
+        <div class="card span-4 technical-only">
+          <h2>技术统计</h2>
+          <div class="section-sub">按严重级别与规则聚合统计（技术详情）</div>
           <pre id="reportStats">暂无报告统计。</pre>
           <div class="section-sub" style="margin-top:8px">发布风险评估与复扫结果（解释：用于判断是否可发布）</div>
           <pre id="selfHealingStats">暂无发布风险评估统计。</pre>
         </div>
 
-        <div class="card span-6">
+        <div class="card span-6 technical-only">
           <h2>系统统计</h2>
           <div class="section-sub">平台聚合指标与任务分布</div>
           <pre id="systemStats">加载中...</pre>
         </div>
-        <div id="trendSection" class="card span-6">
+        <div id="trendSection" class="card span-6 technical-only">
           <h2>报告趋势</h2>
           <div class="section-sub">最近会话发现数变化趋势</div>
           <pre id="reportTrends">加载中...</pre>
@@ -731,7 +787,7 @@
           </div>
         </div>
 
-        <div id="adminSection" class="card span-6">
+        <div id="adminSection" class="card span-6 advanced-only">
           <h2>管理员 Token 管理</h2>
           <div class="section-sub">查看 token 列表并按角色轮换</div>
           <div class="toolbar">
@@ -746,7 +802,7 @@
           <pre id="tokenAdmin" style="margin-top:10px">管理员面板输出...</pre>
         </div>
 
-        <div class="card span-6">
+        <div class="card span-6 advanced-only">
           <h2>审计日志查询</h2>
           <div class="section-sub">按动作/状态过滤关键操作记录</div>
           <div class="toolbar">
@@ -825,6 +881,17 @@
         if (g === "fail") return "阻断发布";
         return "未评估";
       }
+      function phaseLabel(phase) {
+        const p = String(phase || "");
+        if (p === "queued") return "排队中";
+        if (p === "running") return "执行中";
+        if (p === "llm_check") return "AI 连通校验";
+        if (p === "analysis") return "代码审阅分析";
+        if (p === "reporting") return "生成报告";
+        if (p === "completed") return "已完成";
+        if (p === "failed") return "已失败";
+        return p || "未知阶段";
+      }
 
       function setTheme(nextTheme) {
         theme = nextTheme;
@@ -883,6 +950,20 @@
         const s = document.getElementById("uploadStatus");
         p.value = Math.max(0, Math.min(100, Number(percent || 0)));
         s.textContent = `上传状态：${text}`;
+      }
+
+      let purgeOnCloseTriggered = false;
+      function purgeHistoryOnPageClose() {
+        if (purgeOnCloseTriggered) return;
+        purgeOnCloseTriggered = true;
+        try {
+          fetch("/api/tasks/purge", {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-codebot-token": token },
+            body: JSON.stringify({ reason: "page_close" }),
+            keepalive: true
+          }).catch(() => {});
+        } catch (_err) {}
       }
 
       async function listTokens() {
@@ -1069,6 +1150,7 @@
           currentRole = body.data?.role || "unknown";
           currentProvider = body.data?.llmProvider || "mock";
           currentModel = body.data?.llmModel || "N/A";
+          serverStartedAt = Number(body.data?.serverStartedAt || 0);
           document.getElementById("llmProviderInput").value = currentProvider;
           document.getElementById("llmModelInput").value = currentModel;
           document.getElementById("llmBaseUrlInput").value = body.data?.llmBaseUrl || "";
@@ -1131,11 +1213,16 @@
       let currentModel = "N/A";
       let globalSearch = "";
       let dashboardView = localStorage.getItem("codebot-dashboard-view") || "cozy";
+      let advancedMode = localStorage.getItem("codebot-advanced-mode") === "1";
       let lastTrendPoints = [];
       let gateDecisionMap = {};
       let latestFailSessionId = "";
       let gateReasonsMap = {};
       let activeFailReasonFilter = "";
+      let onlyCurrentSession = true;
+      let serverStartedAt = 0;
+      let progressPollTimer = null;
+      let showTechnical = localStorage.getItem("codebot-show-technical") === "1";
       function loadViewState() {
         try {
           const raw = localStorage.getItem("codebot-view-state");
@@ -1150,6 +1237,7 @@
           }
           if (Number.isFinite(Number(s.offset)) && Number(s.offset) >= 0) offset = Number(s.offset);
           if (typeof s.failReasonFilter === "string") activeFailReasonFilter = s.failReasonFilter;
+          if (typeof s.onlyCurrentSession === "boolean") onlyCurrentSession = s.onlyCurrentSession;
         } catch (_err) {}
       }
       function saveViewState() {
@@ -1159,11 +1247,13 @@
           selfHealFilter: document.getElementById("selfHealFilter").value || "",
           globalSearch,
           offset,
-          failReasonFilter: activeFailReasonFilter || ""
+          failReasonFilter: activeFailReasonFilter || "",
+          onlyCurrentSession
         };
         localStorage.setItem("codebot-view-state", JSON.stringify(state));
       }
       function currentFilterSummary() {
+        if (!advancedMode) return "基础模式";
         const gate = document.getElementById("selfHealFilter")?.value || "all";
         const reason = activeFailReasonFilter || "all";
         return `风险评估=${gateLabel(gate === "all" ? "unknown" : gate)}, 原因=${reason}`;
@@ -1208,6 +1298,12 @@
         const mode = document.getElementById("modeFilter").value;
         if (status) params.set("status", status);
         if (mode) params.set("mode", mode);
+        if (!onlyCurrentSession) {
+          params.set("includeHistory", "1");
+        }
+        if (onlyCurrentSession && Number.isFinite(serverStartedAt) && serverStartedAt > 0) {
+          params.set("createdAfter", String(serverStartedAt));
+        }
         params.set("limit", String(limit));
         params.set("offset", String(offset));
         params.set("sortBy", "updatedAt");
@@ -1306,6 +1402,8 @@
           }
           const task = taskBody.data;
           document.getElementById("taskDetail").textContent = safeText(task);
+          await refreshRuntimeProgress(task.id);
+          bindRuntimeProgressPolling(task.id, task.status);
           if (task.resultJsonPath) {
             const reportRes = await fetch(`/api/reports/${taskId}`, { headers: { "x-codebot-token": token } });
             if (reportRes.ok) {
@@ -1345,11 +1443,62 @@
         }
       }
 
+      async function refreshRuntimeProgress(taskId) {
+        const box = document.getElementById("runtimeProgressCard");
+        const titleNode = box.querySelector(".result-title");
+        const textNode = document.getElementById("runtimeProgressText");
+        const fill = document.getElementById("runtimeProgressFill");
+        try {
+          const res = await fetch(`/api/tasks/${taskId}/progress`, { headers: { "x-codebot-token": token } });
+          const body = await res.json();
+          if (!res.ok || !body?.data) {
+            titleNode.textContent = "实时审阅轨迹：读取失败";
+            textNode.textContent = "无法读取任务进度";
+            fill.style.width = "0%";
+            box.className = "result-card result-danger";
+            return;
+          }
+          const p = body.data;
+          const percent = Math.max(0, Math.min(100, Number(p.percent || 0)));
+          const phase = String(p.phase || "running");
+          titleNode.textContent = `实时审阅轨迹：${phaseLabel(phase)}`;
+          textNode.textContent = `${String(p.message || "")}（${percent}%）`;
+          fill.style.width = `${percent}%`;
+          if (p.done && p.ok === true) box.className = "result-card result-ok";
+          else if (p.done && p.ok === false) box.className = "result-card result-danger";
+          else box.className = "result-card result-warn";
+        } catch (_error) {
+          titleNode.textContent = "实时审阅轨迹：读取异常";
+          textNode.textContent = "进度读取异常，请稍后刷新";
+          fill.style.width = "0%";
+          box.className = "result-card result-danger";
+        }
+      }
+
+      function bindRuntimeProgressPolling(taskId, status) {
+        if (progressPollTimer) {
+          clearInterval(progressPollTimer);
+          progressPollTimer = null;
+        }
+        if (!["queued", "running"].includes(String(status || ""))) return;
+        progressPollTimer = setInterval(async () => {
+          if (!selectedTaskId || selectedTaskId !== taskId) return;
+          await refreshRuntimeProgress(taskId);
+        }, 1500);
+      }
+
       async function refreshStats() {
         try {
+          const statsParams = new URLSearchParams();
+          if (!onlyCurrentSession) {
+            statsParams.set("includeHistory", "1");
+          } else if (Number.isFinite(serverStartedAt) && serverStartedAt > 0) {
+            statsParams.set("createdAfter", String(serverStartedAt));
+          }
+          const statsQs = statsParams.toString();
           const [statsRes, trendsRes] = await Promise.all([
-            fetch("/api/stats", { headers: { "x-codebot-token": token } }),
-            fetch("/api/reports/history", { headers: { "x-codebot-token": token } })
+            fetch(`/api/stats${statsQs ? `?${statsQs}` : ""}`, { headers: { "x-codebot-token": token } }),
+            fetch(`/api/reports/history${statsQs ? `?${statsQs}` : ""}`, { headers: { "x-codebot-token": token } })
           ]);
           if (statsRes.ok) {
             const stats = (await statsRes.json()).data;
@@ -1502,30 +1651,33 @@
         });
       }
 
-      async function refresh() {
+      async function refresh(options = {}) {
+        const showLoading = options.showLoading !== false;
         try {
-          toggleSkeleton(true);
+          if (showLoading) toggleSkeleton(true);
           await refreshStats();
           const res = await fetch(`/api/tasks?${buildTaskQuery()}`, { headers: { "x-codebot-token": token } });
           const payload = await res.json();
           if (!res.ok) {
             document.getElementById("taskDetail").textContent = formatErr("读取任务列表失败", res, payload);
-            toggleSkeleton(false);
+            if (showLoading) toggleSkeleton(false);
             return;
           }
           const data = payload.data || {};
           const rawTasks = data.items || [];
           const selfHealFilter = document.getElementById("selfHealFilter").value;
-          const failReasonFilter = activeFailReasonFilter;
+          const failReasonFilter = advancedMode ? activeFailReasonFilter : "";
           const tasks = rawTasks.filter((t) => {
             if (!globalSearch) return true;
             const blob = `${t.id} ${t.target} ${t.status} ${t.mode}`.toLowerCase();
             return blob.includes(globalSearch.toLowerCase());
           }).filter((t) => {
+            if (!advancedMode) return true;
             if (!selfHealFilter) return true;
             const gate = String(gateDecisionMap[String(t.id)] || "unknown");
             return gate === selfHealFilter;
           }).filter((t) => {
+            if (!advancedMode) return true;
             if (!failReasonFilter) return true;
             const reasons = Array.isArray(gateReasonsMap[String(t.id)]) ? gateReasonsMap[String(t.id)] : [];
             return reasons.some((r) => String(r || "").includes(failReasonFilter));
@@ -1608,10 +1760,10 @@
             const hit = tasks.find((t) => t.id === selectedTaskId);
             if (hit) await showTask(selectedTaskId);
           }
-          toggleSkeleton(false);
+          if (showLoading) toggleSkeleton(false);
         } catch (error) {
           document.getElementById("taskDetail").textContent = `刷新异常: ${String(error)}`;
-          toggleSkeleton(false);
+          if (showLoading) toggleSkeleton(false);
         }
       }
 
@@ -1715,11 +1867,24 @@
         saveViewState();
         await refresh();
       });
+      document.getElementById("currentSessionOnly").addEventListener("change", async (e) => {
+        onlyCurrentSession = Boolean(e.target.checked);
+        offset = 0;
+        saveViewState();
+        await refresh();
+        showToast(onlyCurrentSession ? "已切换为仅看本次启动任务" : "已切换为查看全部历史任务");
+      });
       document.getElementById("themeLight").addEventListener("click", () => setTheme("light"));
       document.getElementById("themeDark").addEventListener("click", () => setTheme("dark"));
       document.getElementById("closeReasonOverlayBtn").addEventListener("click", closeReasonModal);
       document.getElementById("reasonOverlay").addEventListener("click", (e) => {
         if (e.target && e.target.id === "reasonOverlay") closeReasonModal();
+      });
+      window.addEventListener("beforeunload", () => {
+        if (progressPollTimer) {
+          clearInterval(progressPollTimer);
+          progressPollTimer = null;
+        }
       });
       function setDashboardView(view) {
         dashboardView = view;
@@ -1728,8 +1893,37 @@
         document.getElementById("viewCozy").classList.toggle("active", view === "cozy");
         document.getElementById("viewCompact").classList.toggle("active", view === "compact");
       }
+      function setAdvancedMode(next) {
+        advancedMode = Boolean(next);
+        localStorage.setItem("codebot-advanced-mode", advancedMode ? "1" : "0");
+        document.body.classList.toggle("advanced-mode", advancedMode);
+        const toggle = document.getElementById("advancedModeToggle");
+        if (toggle) toggle.checked = advancedMode;
+        if (!advancedMode) {
+          activeFailReasonFilter = "";
+          const selfHeal = document.getElementById("selfHealFilter");
+          const failReason = document.getElementById("failReasonFilter");
+          if (selfHeal) selfHeal.value = "";
+          if (failReason) failReason.value = "";
+          saveViewState();
+        }
+      }
+      function setTechnicalMode(next) {
+        showTechnical = Boolean(next);
+        localStorage.setItem("codebot-show-technical", showTechnical ? "1" : "0");
+        document.body.classList.toggle("show-technical", showTechnical);
+        const btn = document.getElementById("toggleTechnicalBtn");
+        if (btn) btn.textContent = showTechnical ? "收起技术详情" : "展开技术详情";
+      }
       document.getElementById("viewCozy").addEventListener("click", () => setDashboardView("cozy"));
       document.getElementById("viewCompact").addEventListener("click", () => setDashboardView("compact"));
+      document.getElementById("toggleTechnicalBtn").addEventListener("click", () => {
+        setTechnicalMode(!showTechnical);
+      });
+      document.getElementById("advancedModeToggle").addEventListener("change", async (e) => {
+        setAdvancedMode(Boolean(e.target.checked));
+        await refresh();
+      });
       const sideItems = Array.from(document.querySelectorAll("[data-nav-target]"));
       sideItems.forEach((btn) => {
         btn.addEventListener("click", () => {
@@ -1760,14 +1954,20 @@
       });
       setTheme(theme);
       setDashboardView(dashboardView);
+      setAdvancedMode(advancedMode);
+      setTechnicalMode(showTechnical);
       loadViewState();
+      document.getElementById("currentSessionOnly").checked = onlyCurrentSession;
       bindChartTooltip();
+      window.addEventListener("pagehide", purgeHistoryOnPageClose);
+      window.addEventListener("beforeunload", purgeHistoryOnPageClose);
       refresh();
       refreshMe();
       refreshUploadHistory();
       document.getElementById("welcomeBar").textContent = "欢迎使用 Codebot 中文控制台。可通过右上角切换主题，并在各模块中折叠/展开面板。";
       setInterval(() => {
-        refresh();
+        if (document.hidden) return;
+        refresh({ showLoading: false });
         refreshUploadHistory();
       }, 3000);
     </script>

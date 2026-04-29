@@ -83,6 +83,10 @@ export class PostgresTaskStore implements ITaskStore {
       params.push(q.mode);
       conditions.push(`mode = $${params.length}`);
     }
+    if (Number.isFinite(q.createdAfter)) {
+      params.push(Number(q.createdAfter));
+      conditions.push(`created_at >= $${params.length}`);
+    }
     const sortBy = q.sortBy === "updatedAt" ? "updated_at" : "created_at";
     const sortOrder = q.sortOrder === "asc" ? "ASC" : "DESC";
     const limit = Math.max(1, q.limit ?? 50);
@@ -113,6 +117,10 @@ export class PostgresTaskStore implements ITaskStore {
       params.push(q.mode);
       conditions.push(`mode = $${params.length}`);
     }
+    if (Number.isFinite(q.createdAfter)) {
+      params.push(Number(q.createdAfter));
+      conditions.push(`created_at >= $${params.length}`);
+    }
     const result = await this.client.query(
       `SELECT COUNT(*)::int AS total FROM codebot_tasks ${
         conditions.length ? `WHERE ${conditions.join(" AND ")}` : ""
@@ -125,6 +133,13 @@ export class PostgresTaskStore implements ITaskStore {
   async getById(id: string): Promise<TaskRecord | undefined> {
     const rows = await this.client.query(`SELECT * FROM codebot_tasks WHERE id=$1`, [id]);
     return rows.rows.length ? this.mapRow(rows.rows[0]) : undefined;
+  }
+
+  async purgeAll(): Promise<number> {
+    const before = await this.client.query(`SELECT COUNT(*)::int AS total FROM codebot_tasks`);
+    const total = Number(before.rows[0]?.total ?? 0);
+    await this.client.query(`DELETE FROM codebot_tasks`);
+    return total;
   }
 
   private mapRow(row: any): TaskRecord {

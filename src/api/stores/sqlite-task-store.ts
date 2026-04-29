@@ -86,6 +86,10 @@ export class SqliteTaskStore implements ITaskStore {
       where.push("mode = ?");
       params.push(q.mode);
     }
+    if (Number.isFinite(q.createdAfter)) {
+      where.push("created_at >= ?");
+      params.push(Number(q.createdAfter));
+    }
     const sortBy = q.sortBy === "updatedAt" ? "updated_at" : "created_at";
     const sortOrder = q.sortOrder === "asc" ? "ASC" : "DESC";
     const limit = Math.max(1, q.limit ?? 50);
@@ -113,6 +117,10 @@ export class SqliteTaskStore implements ITaskStore {
       where.push("mode = ?");
       params.push(q.mode);
     }
+    if (Number.isFinite(q.createdAfter)) {
+      where.push("created_at >= ?");
+      params.push(Number(q.createdAfter));
+    }
     const rows = this.query(
       `SELECT COUNT(*) as total FROM codebot_tasks ${where.length ? `WHERE ${where.join(" AND ")}` : ""}`,
       params
@@ -127,6 +135,14 @@ export class SqliteTaskStore implements ITaskStore {
       [id]
     );
     return rows.length ? this.mapRow(rows[0]) : undefined;
+  }
+
+  async purgeAll(): Promise<number> {
+    const rows = this.query(`SELECT COUNT(*) as total FROM codebot_tasks`);
+    const total = Number(rows[0]?.total ?? 0);
+    this.client.run(`DELETE FROM codebot_tasks`);
+    this.flush();
+    return total;
   }
 
   private query(sql: string, params: Array<string | number | null> = []): any[] {

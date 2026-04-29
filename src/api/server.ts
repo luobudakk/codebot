@@ -19,11 +19,13 @@ function parseTaskListQuery(query: Record<string, unknown>): TaskListQuery {
   const mode = typeof query.mode === "string" ? query.mode : undefined;
   const offset = Number(query.offset ?? 0);
   const limit = Number(query.limit ?? 50);
+  const createdAfter = Number(query.createdAfter ?? Number.NaN);
   const sortBy = query.sortBy === "updatedAt" ? "updatedAt" : "createdAt";
   const sortOrder = query.sortOrder === "asc" ? "asc" : "desc";
   return {
     status: status as TaskListQuery["status"],
     mode: mode as TaskListQuery["mode"],
+    createdAfter: Number.isFinite(createdAfter) ? Math.max(0, createdAfter) : undefined,
     offset: Number.isFinite(offset) ? Math.max(0, offset) : 0,
     limit: Number.isFinite(limit) ? Math.max(1, Math.min(200, limit)) : 50,
     sortBy,
@@ -35,7 +37,7 @@ function listReportJsonFiles(reportDir: string): string[] {
   if (!fs.existsSync(reportDir)) return [];
   return fs
     .readdirSync(reportDir)
-    .filter((name) => name.endsWith(".json"))
+    .filter((name) => name.endsWith(".json") && !name.endsWith("-git-proposal.json"))
     .map((name) => path.join(reportDir, name));
 }
 
@@ -84,7 +86,30 @@ function queryUploadHistory(dataDir: string, limit: number, offset: number): { i
   return { items: rows.slice(offset, offset + limit), total };
 }
 
+function purgeRuntimeData(config: { dataDir: string; reportDir: string }): { removedReports: number; removedUploads: number } {
+  let removedReports = 0;
+  let removedUploads = 0;
+  if (fs.existsSync(config.reportDir)) {
+    const reportFiles = fs.readdirSync(config.reportDir);
+    removedReports = reportFiles.length;
+    fs.rmSync(config.reportDir, { recursive: true, force: true });
+  }
+  fs.mkdirSync(config.reportDir, { recursive: true });
+  const uploadDir = path.join(config.dataDir, "uploads");
+  if (fs.existsSync(uploadDir)) {
+    removedUploads = fs.readdirSync(uploadDir).length;
+    fs.rmSync(uploadDir, { recursive: true, force: true });
+  }
+  fs.mkdirSync(uploadDir, { recursive: true });
+  const uploadHistoryFile = uploadHistoryPath(config.dataDir);
+  if (fs.existsSync(uploadHistoryFile)) {
+    fs.rmSync(uploadHistoryFile, { force: true });
+  }
+  return { removedReports, removedUploads };
+}
+
 export async function createApp(config = loadConfig("config.yaml")): Promise<Express> {
+  const serverStartedAt = Date.now();
   const logger = new Logger(config.logLevel);
   const auth = new AuthManager(config.dataDir, config.apiTokens);
   const audit = new AuditLogStore(config.dataDir);
@@ -139,7 +164,8 @@ export async function createApp(config = loadConfig("config.yaml")): Promise<Exp
       llmProvider: llm.provider,
       llmModel: llm.model,
       llmBaseUrl: llm.baseUrl,
-      llmReady: llm.hasApiKey
+      llmReady: llm.hasApiKey,
+      serverStartedAt
     });
   });
 
@@ -151,7 +177,9 @@ export async function createApp(config = loadConfig("config.yaml")): Promise<Exp
         "/health": { get: { summary: "Health check" } },
         "/api/me": { get: { summary: "Get current role" } },
         "/api/tasks": { get: { summary: "List tasks" }, post: { summary: "Create task (admin/operator)" } },
+        "/api/tasks/purge": { post: { summary: "Purge all task history and reports (admin/operator)" } },
         "/api/tasks/{id}": { get: { summary: "Get task detail" } },
+        "/api/tasks/{id}/progress": { get: { summary: "Get task runtime progress" } },
         "/api/stats": { get: { summary: "Get task/report stats" } },
         "/api/uploads": { post: { summary: "Upload .py/.pdf/.txt/.doc/.docx and create scan task (admin/operator)" } },
         "/api/uploads/history": { get: { summary: "List upload history (admin/operator/viewer)" } },
@@ -258,6 +286,10 @@ export async function createApp(config = loadConfig("config.yaml")): Promise<Exp
 
   app.get("/api/tasks", async (req, res) => {
     const query = parseTaskListQuery(req.query as Record<string, unknown>);
+    const includeHistory = String((req.query as Record<string, unknown>).includeHistory ?? "") === "1";
+    if (!includeHistory && !Number.isFinite(query.createdAfter)) {
+      query.createdAfter = serverStartedAt;
+    }
     const [rows, total] = await Promise.all([store.list(query), store.count(query)]);
     ok(res, { items: rows, total, offset: query.offset ?? 0, limit: query.limit ?? 50 });
   });
@@ -266,6 +298,36 @@ export async function createApp(config = loadConfig("config.yaml")): Promise<Exp
     const task = await store.getById(req.params.id);
     if (!task) return fail(res, 404, "TASK_NOT_FOUND", "task not found");
     ok(res, task);
+  });
+
+  app.get("/api/tasks/:id/progress", async (req, res) => {
+    const task = await store.getById(req.params.id);
+    if (!task) return fail(res, 404, "TASK_NOT_FOUND", "task not found");
+    const progress = queue.getProgress(task.id) ?? {
+      phase: task.status === "succeeded" ? "completed" : task.status,
+      percent: task.status === "succeeded" || task.status === "failed" || task.status === "cancelled" ? 100 : 0,
+      message:
+        task.status === "succeeded"
+          ? "任务已完成"
+          : task.status === "failed"
+          ? task.error || "任务失败"
+          : task.status === "running"
+          ? "任务执行中"
+          : "任务等待中",
+      updatedAt: task.updatedAt,
+      done: task.status === "succeeded" || task.status === "failed" || task.status === "cancelled",
+      ok: task.status === "succeeded" ? true : task.status === "failed" ? false : undefined
+    };
+    ok(res, { taskId: task.id, status: task.status, ...progress });
+  });
+
+  app.post("/api/tasks/purge", async (req, res) => {
+    const role = (req as any).actorRole as string;
+    if (!["admin", "operator"].includes(role)) return fail(res, 403, "AUTH_FORBIDDEN", "forbidden");
+    const purgedTasks = await store.purgeAll();
+    const purgedFiles = purgeRuntimeData({ dataDir: config.dataDir, reportDir: config.reportDir });
+    audit.append({ ts: Date.now(), actorRole: role, action: "purge_tasks", resource: "/api/tasks/purge", status: "ok" });
+    ok(res, { purgedTasks, ...purgedFiles });
   });
 
   app.get("/api/auth/tokens", (req, res) => {
@@ -282,23 +344,57 @@ export async function createApp(config = loadConfig("config.yaml")): Promise<Exp
     ok(res, { role: token.role, token: token.token });
   });
 
-  app.get("/api/stats", async (_req, res) => {
+  app.get("/api/stats", async (req, res) => {
+    const includeHistory = String((req.query as Record<string, unknown>).includeHistory ?? "") === "1";
+    const createdAfterRaw = Number((req.query as Record<string, unknown>).createdAfter ?? Number.NaN);
+    const createdAfter =
+      Number.isFinite(createdAfterRaw) ? Math.max(0, createdAfterRaw) : includeHistory ? undefined : serverStartedAt;
     const [queued, running, succeeded, failed, cancelled] = await Promise.all([
-      store.count({ status: "queued" }),
-      store.count({ status: "running" }),
-      store.count({ status: "succeeded" }),
-      store.count({ status: "failed" }),
-      store.count({ status: "cancelled" })
+      store.count({ status: "queued", createdAfter }),
+      store.count({ status: "running", createdAfter }),
+      store.count({ status: "succeeded", createdAfter }),
+      store.count({ status: "failed", createdAfter }),
+      store.count({ status: "cancelled", createdAfter })
     ]);
-    const reportFiles = listReportJsonFiles(config.reportDir);
+    const reportFiles = listReportJsonFiles(config.reportDir).filter((reportPath) => {
+      if (!Number.isFinite(createdAfter)) return true;
+      const raw = JSON.parse(fs.readFileSync(reportPath, "utf8")) as any;
+      const createdAt = Number(raw?.createdAt ?? 0);
+      if (!Number.isFinite(createdAt) || createdAt <= 0) return true;
+      return createdAt >= Number(createdAfter);
+    });
     ok(res, { tasks: { queued, running, succeeded, failed, cancelled }, reports: { count: reportFiles.length } });
   });
 
-  app.get("/api/reports/history", (_req, res) => {
-    const rows = listReportJsonFiles(config.reportDir).map((reportPath) => {
+  app.get("/api/reports/history", (req, res) => {
+    const includeHistory = String((req.query as Record<string, unknown>).includeHistory ?? "") === "1";
+    const createdAfterRaw = Number((req.query as Record<string, unknown>).createdAfter ?? Number.NaN);
+    const createdAfter =
+      Number.isFinite(createdAfterRaw) ? Math.max(0, createdAfterRaw) : includeHistory ? undefined : serverStartedAt;
+    const rows = listReportJsonFiles(config.reportDir)
+      .map((reportPath) => {
       const raw = JSON.parse(fs.readFileSync(reportPath, "utf8")) as any;
-      return { sessionId: String(raw.sessionId ?? ""), target: String(raw.target ?? ""), findingCount: Number(raw.findingCount ?? 0) };
-    });
+      return {
+        sessionId: String(raw.sessionId ?? ""),
+        target: String(raw.target ?? ""),
+        createdAt: Number(raw.createdAt ?? 0),
+        findingCount: Number(raw.findingCount ?? 0),
+        agentAnalysis: raw.agentAnalysis
+          ? {
+              selfHealing: {
+                gateDecision: String(raw.agentAnalysis?.selfHealing?.gateDecision ?? "unknown"),
+                reasons: Array.isArray(raw.agentAnalysis?.selfHealing?.reasons) ? raw.agentAnalysis.selfHealing.reasons : []
+              }
+            }
+          : undefined
+      };
+      })
+      .filter((row) => {
+        if (!Number.isFinite(createdAfter)) return true;
+        const createdAt = Number(row.createdAt ?? 0);
+        if (!Number.isFinite(createdAt) || createdAt <= 0) return true;
+        return createdAt >= Number(createdAfter);
+      });
     ok(res, rows);
   });
 

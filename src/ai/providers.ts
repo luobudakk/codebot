@@ -9,7 +9,7 @@ export interface LLMProvider {
   chat(messages: ChatMessage[]): Promise<string>;
 }
 
-function resolveApiKey(provider: string, explicitApiKey?: string): string {
+export function resolveProviderApiKey(provider: string, explicitApiKey?: string): string {
   if (explicitApiKey?.trim()) return explicitApiKey.trim();
   const meta = getProviderMeta(provider);
   const providerKey = meta?.apiKeyEnv ? process.env[meta.apiKeyEnv] : "";
@@ -151,7 +151,7 @@ class OllamaProvider implements LLMProvider {
 export function createLLM(provider: string, model: string, baseUrl: string, apiKey?: string): LLMProvider {
   const resolvedProvider = provider.toLowerCase();
   const resolvedBaseUrl = providerDefaultBaseUrl(resolvedProvider, baseUrl);
-  const resolvedApiKey = resolveApiKey(resolvedProvider, apiKey);
+  const resolvedApiKey = resolveProviderApiKey(resolvedProvider, apiKey);
   if (resolvedProvider === "ollama") {
     return new OllamaProvider(resolvedBaseUrl, model);
   }
@@ -170,7 +170,16 @@ export function createLLM(provider: string, model: string, baseUrl: string, apiK
       "groq",
       "moonshot",
       "zhipu",
-      "siliconflow"
+      "siliconflow",
+      "openrouter",
+      "mistral",
+      "xai",
+      "together",
+      "fireworks",
+      "nvidia_nim",
+      "yi",
+      "baichuan",
+      "minimax"
     ].includes(resolvedProvider)
   ) {
     return new OpenAICompatProvider(resolvedBaseUrl, model, resolvedApiKey);

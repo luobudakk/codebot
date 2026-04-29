@@ -3,6 +3,7 @@ import { TaskRecord } from "../utils/types";
 export interface TaskListQuery {
   status?: TaskRecord["status"];
   mode?: TaskRecord["mode"];
+  createdAfter?: number;
   offset?: number;
   limit?: number;
   sortBy?: "createdAt" | "updatedAt";
@@ -16,4 +17,5 @@ export interface ITaskStore {
   list(query?: TaskListQuery): Promise<TaskRecord[]>;
   count(query?: TaskListQuery): Promise<number>;
   getById(id: string): Promise<TaskRecord | undefined>;
+  purgeAll(): Promise<number>;
 }

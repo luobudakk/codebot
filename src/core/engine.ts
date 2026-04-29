@@ -1,4 +1,4 @@
-import { createLLM } from "../ai/providers";
+import { createLLM, resolveProviderApiKey } from "../ai/providers";
 import { prepareTarget, scanCodeQuality, SessionManager } from "../automation/pipeline";
 import {
   buildGitProposal,
@@ -11,7 +11,8 @@ import { AppConfig } from "../utils/config";
 import { Logger } from "../utils/logger";
 import { AgentAnalysis, RunResult } from "../utils/types";
 import { mergeRules } from "../rules/registry";
-import { chooseTools, executeTools, planToolLayers, ToolLayer } from "../agents/toolchain";
+import { ToolLayer } from "../agents/toolchain";
+import { runLangGraphAgentWorkflow } from "../agents/langgraph-workflow";
 
 type ToolExecutionLike = { name: string; status: "ok" | "skipped" | "error"; summary: string; output: Record<string, unknown> };
 
@@ -189,9 +190,7 @@ export class CodeQualityBotEngine {
       provider: this.llmProvider,
       model: this.llmModel,
       baseUrl: this.llmBaseUrl,
-      hasApiKey: providerNeedsKey
-        ? Boolean(this.llmApiKey || process.env.CODEBOT_LLM_API_KEY || process.env.OPENAI_API_KEY)
-        : true
+      hasApiKey: providerNeedsKey ? Boolean(resolveProviderApiKey(this.llmProvider, this.llmApiKey)) : true
     };
   }
 
@@ -220,7 +219,27 @@ export class CodeQualityBotEngine {
     }
   }
 
+  private async ensureLLMReadyForScan(): Promise<void> {
+    const provider = this.llmProvider.toLowerCase();
+    if (provider === "mock") {
+      throw new Error(
+        "LLM provider 'mock' is disabled for scan/fix. Configure a real provider (e.g. openai, deepseek, qwen, ollama) before running checks."
+      );
+    }
+    const status = this.getLLMStatus();
+    if (!status.hasApiKey) {
+      throw new Error(
+        `LLM provider '${this.llmProvider}' requires an API key. Set provider-specific env or CODEBOT_LLM_API_KEY before running checks.`
+      );
+    }
+    const health = await this.testLLMConnection();
+    if (!health.ok) {
+      throw new Error(`LLM connection test failed: ${health.message}`);
+    }
+  }
+
   async run(target: string, options?: { applyGitProposal?: boolean }): Promise<RunResult> {
+    await this.ensureLLMReadyForScan();
     const session = this.sessionManager.create(target);
     const rules = mergeRules(this.config.rules);
     this.logger.info("engine_started", { target, sessionId: session.sessionId, rules: rules.length });
@@ -256,45 +275,28 @@ export class CodeQualityBotEngine {
       }
     ]);
     this.sessionManager.addEvent(session.sessionId, "ai_review", { provider: this.llmProvider, model: this.llmModel });
-    const plannerRaw = await this.llm.chat([
-      {
-        role: "system",
-        content:
-          "你是代码质量AI Agent的Planner。请输出JSON：{objectives:string[], prioritizedRisks:string[], executionPlan:string[]}，不要输出其他文本。"
-      },
-      {
-        role: "user",
-        content: `基于发现项制定修复计划：\n${JSON.stringify(findings, null, 2)}`
-      }
-    ]);
+    const workflow = await runLangGraphAgentWorkflow({
+      llm: this.llm,
+      findings,
+      repoPath
+    });
     this.sessionManager.addEvent(session.sessionId, "agent_planner", { provider: this.llmProvider, model: this.llmModel });
-    const strategistRaw = await this.llm.chat([
-      {
-        role: "system",
-        content:
-          "你是代码质量AI Agent的Strategist。请输出JSON：{quickWins:string[], deepFixes:string[], testPlan:string[]}，不要输出其他文本。"
-      },
-      {
-        role: "user",
-        content: `根据当前扫描发现和目标路径，给出可执行修复策略：\n目标=${repoPath}\n发现数=${findings.length}`
-      }
-    ]);
+    const plannerRaw = workflow.plannerRaw;
+    const strategistRaw = workflow.strategistRaw;
     this.sessionManager.addEvent(session.sessionId, "agent_strategist", { provider: this.llmProvider, model: this.llmModel });
-    const selectedTools = chooseTools(findings);
-    const toolLayers = planToolLayers(selectedTools);
-    const toolExecutions: Array<{ name: string; status: "ok" | "skipped" | "error"; summary: string; output: Record<string, unknown> }> = [];
+    const toolLayers = workflow.toolLayers;
+    const toolExecutions = workflow.toolExecutions;
     for (const layer of toolLayers) {
       this.sessionManager.addEvent(session.sessionId, "agent_executor_layer_start", {
         name: layer.name,
         tools: layer.tools
       });
-      toolExecutions.push(...executeTools(layer.tools, findings));
       this.sessionManager.addEvent(session.sessionId, "agent_executor_layer_complete", {
         name: layer.name
       });
     }
     this.sessionManager.addEvent(session.sessionId, "agent_executor", {
-      selectedTools,
+      selectedTools: workflow.toolExecutions.map((x) => x.name),
       layers: toolLayers,
       executed: toolExecutions.map((x) => ({ name: x.name, status: x.status }))
     });
@@ -342,21 +344,7 @@ export class CodeQualityBotEngine {
       const applied = await executeGitProposal(gitProposal);
       this.sessionManager.addEvent(session.sessionId, "git_applied", applied as Record<string, unknown>);
     }
-    const reviewerRaw = await this.llm.chat([
-      {
-        role: "system",
-        content:
-          "你是代码质量AI Agent的Reviewer。请输出JSON：{readiness:'ready'|'needs_changes'|'blocked', releaseGate:string, residualRisks:string[], nextActions:string[]}，不要输出其他文本。"
-      },
-      {
-        role: "user",
-        content: `请评审当前交付就绪度：\n发现数=${findings.length}\nGit提案=${gitProposalPath ?? "N/A"}\n目标=${repoPath}\nExecutor=${JSON.stringify(
-          toolExecutions.map((x) => ({ name: x.name, status: x.status, summary: x.summary })),
-          null,
-          2
-        )}`
-      }
-    ]);
+    const reviewerRaw = workflow.reviewerRaw;
     this.sessionManager.addEvent(session.sessionId, "agent_reviewer", { provider: this.llmProvider, model: this.llmModel });
     const agentAnalysis = buildAgentAnalysis(
       this.llmProvider,
